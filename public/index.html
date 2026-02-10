@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Orchestrator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+        .typing-dot {
+            animation: typing 1.4s infinite ease-in-out both;
+        }
+        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes typing {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 h-screen flex flex-col font-sans">
+    <div id="app" class="flex-1 flex flex-col max-w-4xl mx-auto w-full h-full p-4">
+        
+        <!-- Header -->
+        <header class="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
+            <h1 class="text-xl font-bold text-blue-400">Gemini MCP Orchestrator</h1>
+            <div class="text-xs px-2 py-1 rounded" :class="isConnected ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'">
+                {{ isConnected ? 'Connected' : 'Disconnected' }}
+            </div>
+        </header>
+
+        <!-- Chat Area -->
+        <main class="flex-1 overflow-y-auto space-y-4 pr-2 mb-4" ref="chatContainer">
+            <div v-if="messages.length === 0" class="text-center text-gray-500 mt-20">
+                <p>Start a conversation to spawn your secure workspace.</p>
+            </div>
+
+            <div v-for="(msg, index) in messages" :key="index" class="flex flex-col space-y-1">
+                
+                <!-- User Message -->
+                <div v-if="msg.role === 'user'" class="self-end max-w-[80%]">
+                    <div class="bg-blue-600 text-white px-4 py-2 rounded-2xl rounded-tr-none">
+                        {{ msg.content }}
+                    </div>
+                </div>
+
+                <!-- Agent Message -->
+                <div v-if="msg.role === 'agent'" class="self-start max-w-[80%]">
+                    <div class="bg-gray-700 text-gray-100 px-4 py-2 rounded-2xl rounded-tl-none whitespace-pre-wrap">
+                        {{ msg.content }}
+                    </div>
+                </div>
+
+                <!-- Thinking State -->
+                <div v-if="msg.role === 'thinking'" class="self-start text-gray-400 text-sm flex items-center space-x-1 pl-2">
+                    <span>Thinking</span>
+                    <div class="flex space-x-1">
+                        <div class="w-1.5 h-1.5 bg-gray-400 rounded-full typing-dot"></div>
+                        <div class="w-1.5 h-1.5 bg-gray-400 rounded-full typing-dot"></div>
+                        <div class="w-1.5 h-1.5 bg-gray-400 rounded-full typing-dot"></div>
+                    </div>
+                </div>
+
+                <!-- Approval Card -->
+                <div v-if="msg.role === 'approval'" class="self-start w-full max-w-md bg-gray-800 border border-yellow-700/50 rounded-lg p-4 my-2">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-yellow-500 font-semibold text-sm uppercase tracking-wider">Tool Approval Request</span>
+                        <span class="text-xs text-gray-500">{{ msg.data.callId }}</span>
+                    </div>
+                    <div class="mb-3">
+                        <div class="text-lg font-mono text-white mb-1">{{ msg.data.name }}</div>
+                        <pre class="bg-gray-900 p-2 rounded text-xs text-gray-300 overflow-x-auto">{{ JSON.stringify(msg.data.args, null, 2) }}</pre>
+                    </div>
+                    
+                    <div v-if="!msg.status" class="flex space-x-3">
+                        <button @click="approveTool(msg.data.callId, index)" class="flex-1 bg-green-700 hover:bg-green-600 text-white py-1.5 rounded transition text-sm font-medium">
+                            Approve
+                        </button>
+                        <button @click="rejectTool(msg.data.callId, index)" class="flex-1 bg-red-900/50 hover:bg-red-800 text-red-200 py-1.5 rounded transition text-sm font-medium border border-red-800">
+                            Reject
+                        </button>
+                    </div>
+                    <div v-else class="text-sm text-center py-1 font-medium" :class="msg.status === 'approved' ? 'text-green-400' : 'text-red-400'">
+                        {{ msg.status === 'approved' ? 'Approved & Executing...' : 'Rejected' }}
+                    </div>
+
+                    <!-- Tool Output Stream -->
+                    <div v-if="msg.output" class="mt-3 pt-2 border-t border-gray-700">
+                        <div class="text-xs text-gray-400 mb-1">Output:</div>
+                        <pre class="bg-black/50 p-2 rounded text-xs text-green-300 overflow-x-auto font-mono max-h-40 overflow-y-auto">{{ msg.output }}</pre>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+
+        <!-- Input Area -->
+        <footer class="mt-auto pt-2">
+            <form @submit.prevent="sendMessage" class="flex space-x-2">
+                <input 
+                    v-model="inputMessage" 
+                    type="text" 
+                    placeholder="Ask Gemini to use a tool..." 
+                    class="flex-1 bg-gray-800 border border-gray-700 text-white rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 transition"
+                    :disabled="!isConnected || isThinking"
+                >
+                <button 
+                    type="submit" 
+                    class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    :disabled="!inputMessage.trim() || !isConnected || isThinking"
+                >
+                    Send
+                </button>
+            </form>
+        </footer>
+
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted, nextTick } = Vue;
+
+        createApp({
+            setup() {
+                const socket = ref(null);
+                const isConnected = ref(false);
+                const messages = ref([]);
+                const inputMessage = ref('');
+                const chatContainer = ref(null);
+                const isThinking = ref(false);
+
+                // Generate a random session ID for demo
+                const sessionId = 'session-' + Math.random().toString(36).substr(2, 9);
+                // In real app, prompt for key or handle auth
+                const apiKey = prompt("Enter Gemini API Key (or leave blank to use server env if allowed):", "") || "";
+
+                const scrollToBottom = () => {
+                    nextTick(() => {
+                        if (chatContainer.value) {
+                            chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
+                        }
+                    });
+                };
+
+                onMounted(() => {
+                    socket.value = io({
+                        query: { sessionId },
+                        auth: { token: apiKey }
+                    });
+
+                    socket.value.on('connect', () => {
+                        isConnected.value = true;
+                        console.log('Connected');
+                    });
+
+                    socket.value.on('disconnect', () => {
+                        isConnected.value = false;
+                        console.log('Disconnected');
+                    });
+
+                    socket.value.on('agent:thinking', () => {
+                        isThinking.value = true;
+                        // Add thinking bubble if not present
+                        if (!messages.value.some(m => m.role === 'thinking')) {
+                             messages.value.push({ role: 'thinking' });
+                             scrollToBottom();
+                        }
+                    });
+
+                    socket.value.on('agent:response', (text) => {
+                        isThinking.value = false;
+                        // Remove thinking bubble
+                        messages.value = messages.value.filter(m => m.role !== 'thinking');
+                        
+                        messages.value.push({ role: 'agent', content: text });
+                        scrollToBottom();
+                    });
+
+                    socket.value.on('tool:approval_required', (data) => {
+                        isThinking.value = false; // Pause thinking UI
+                        messages.value = messages.value.filter(m => m.role !== 'thinking');
+                        
+                        messages.value.push({ 
+                            role: 'approval', 
+                            data: data,
+                            status: null,
+                            output: null
+                        });
+                        scrollToBottom();
+                    });
+
+                    socket.value.on('tool:output', (output) => {
+                        // Find the last approval card
+                        // In a real app we'd match callId, but for now assuming sequential
+                        const lastApproval = messages.value.slice().reverse().find(m => m.role === 'approval');
+                        if (lastApproval) {
+                            lastApproval.output = output;
+                        }
+                        scrollToBottom();
+                    });
+
+                    socket.value.on('agent:error', (err) => {
+                        isThinking.value = false;
+                        messages.value = messages.value.filter(m => m.role !== 'thinking');
+                        messages.value.push({ role: 'agent', content: `❌ Error: ${err}` });
+                        scrollToBottom();
+                    });
+                });
+
+                const sendMessage = () => {
+                    if (!inputMessage.value.trim()) return;
+                    
+                    messages.value.push({ role: 'user', content: inputMessage.value });
+                    socket.value.emit('message', inputMessage.value);
+                    inputMessage.value = '';
+                    scrollToBottom();
+                };
+
+                const approveTool = (callId, index) => {
+                    messages.value[index].status = 'approved';
+                    socket.value.emit('tool:approval', { callId, approved: true });
+                    isThinking.value = true; // Resume thinking
+                };
+
+                const rejectTool = (callId, index) => {
+                    messages.value[index].status = 'rejected';
+                    socket.value.emit('tool:approval', { callId, approved: false });
+                };
+
+                return {
+                    isConnected,
+                    messages,
+                    inputMessage,
+                    chatContainer,
+                    sendMessage,
+                    approveTool,
+                    rejectTool,
+                    isThinking
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
