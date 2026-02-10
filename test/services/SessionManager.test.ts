@@ -16,12 +16,14 @@ const mockSaveSession = jest.fn();
 const mockGetSession = jest.fn();
 const mockUpdateHeartbeat = jest.fn();
 const mockDeleteSession = jest.fn();
+const mockAcquireLock = jest.fn();
 const mockSessionRepository = {
     saveSession: mockSaveSession,
     getSession: mockGetSession,
     updateHeartbeat: mockUpdateHeartbeat,
     deleteSession: mockDeleteSession,
-    getAllSessions: jest.fn()
+    getAllSessions: jest.fn(),
+    acquireLock: mockAcquireLock
 } as unknown as SessionRepository;
 
 describe('SessionManager', () => {
@@ -34,11 +36,13 @@ describe('SessionManager', () => {
 
     it('should acquire a new session if it does not exist', async () => {
         mockGetSession.mockResolvedValue(null);
+        mockAcquireLock.mockResolvedValue(true);
         mockSpawnContainer.mockResolvedValue({ id: 'container-123' });
 
         const session = await sessionManager.acquireSession('user-1');
 
         expect(mockGetSession).toHaveBeenCalledWith('user-1');
+        expect(mockAcquireLock).toHaveBeenCalledWith('user-1', 30000);
         expect(mockSpawnContainer).toHaveBeenCalled();
         expect(mockSaveSession).toHaveBeenCalledWith('user-1', 'container-123');
         expect(session.containerId).toBe('container-123');

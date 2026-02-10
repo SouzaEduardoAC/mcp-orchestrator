@@ -13,17 +13,29 @@ export interface SessionRepository {
   updateHeartbeat(id: string): Promise<void>;
   deleteSession(id: string): Promise<void>;
   getAllSessions(): Promise<string[]>; 
+  acquireLock(id: string, ttlMs: number): Promise<boolean>;
 }
 
 export class RedisSessionRepository implements SessionRepository {
   private redis: RedisClientType | null = null;
   private readonly PREFIX = 'mcp:session:';
+  private readonly LOCK_PREFIX = 'mcp:lock:';
 
   private async getRedis(): Promise<RedisClientType> {
     if (!this.redis) {
       this.redis = await RedisFactory.getInstance();
     }
     return this.redis;
+  }
+
+  async acquireLock(id: string, ttlMs: number): Promise<boolean> {
+    const client = await this.getRedis();
+    const lockKey = `${this.LOCK_PREFIX}${id}`;
+    const result = await client.set(lockKey, 'locked', {
+        NX: true,
+        PX: ttlMs
+    });
+    return result === 'OK';
   }
 
   async saveSession(id: string, containerId: string): Promise<void> {
