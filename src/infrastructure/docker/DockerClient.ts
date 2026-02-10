@@ -28,6 +28,11 @@ export class DockerClient {
       AttachStdin: true,
       AttachStdout: true,
       AttachStderr: true,
+      HostConfig: {
+          Memory: 512 * 1024 * 1024, // 512MB
+          NanoCpus: 500000000,       // 0.5 CPU
+          NetworkMode: 'none'        // Disable networking
+      }
     });
 
     await container.start();

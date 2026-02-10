@@ -2,6 +2,7 @@ import express from 'express';
 import { createServer, Server as HttpServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import cors from 'cors';
+import path from 'path';
 
 export class AppServer {
   public app: express.Application;
@@ -23,6 +24,7 @@ export class AppServer {
   private configureMiddleware() {
     this.app.use(cors());
     this.app.use(express.json());
+    this.app.use(express.static(path.join(__dirname, '../../../../public')));
   }
 
   public listen(port: number, callback?: () => void) {
