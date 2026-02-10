@@ -1,0 +1,57 @@
+import Docker from 'dockerode';
+
+export class DockerClient {
+  private docker: Docker;
+
+  constructor() {
+    this.docker = new Docker();
+  }
+
+  /**
+   * Spawns a new Docker container with the specified image and environment variables.
+   * The container is configured with Tty: false, OpenStdin: true, and attached streams.
+   * 
+   * @param image The Docker image to use.
+   * @param env Key-value pairs of environment variables.
+   * @param cmd Optional command to run in the container.
+   * @returns The started Docker container instance.
+   */
+  async spawnContainer(image: string, env: Record<string, string>, cmd?: string[]): Promise<Docker.Container> {
+    const envArray = Object.entries(env).map(([key, value]) => `${key}=${value}`);
+
+    const container = await this.docker.createContainer({
+      Image: image,
+      Env: envArray,
+      Cmd: cmd,
+      Tty: false,
+      OpenStdin: true,
+      AttachStdin: true,
+      AttachStdout: true,
+      AttachStderr: true,
+    });
+
+    await container.start();
+    return container;
+  }
+  
+  /**
+   * Helper to pull an image. specific for setup/testing.
+   */
+  async pullImage(image: string): Promise<void> {
+      // Stream handling for pull is complex in dockerode, doing a basic follow
+      await new Promise<void>((resolve, reject) => {
+          this.docker.pull(image, (err: any, stream: any) => {
+              if (err) return reject(err);
+              this.docker.modem.followProgress(stream, onFinished, onProgress);
+
+              function onFinished(err: any, output: any) {
+                  if (err) return reject(err);
+                  resolve();
+              }
+              function onProgress(event: any) {
+                  // silent
+              }
+          });
+      });
+  }
+}
