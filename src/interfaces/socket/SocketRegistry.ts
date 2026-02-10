@@ -2,10 +2,11 @@ import { Server, Socket } from 'socket.io';
 import { SessionManager } from '../../services/SessionManager';
 import { ConversationRepository } from '../../domain/conversation/ConversationRepository';
 import { DockerClient } from '../../infrastructure/docker/DockerClient';
-import { GeminiAgent } from '../../services/GeminiAgent';
+import { MCPAgent } from '../../services/MCPAgent';
+import { AgentFactory } from '../../services/factories/AgentFactory';
 
 export class SocketRegistry {
-  private agents: Map<string, GeminiAgent> = new Map();
+  private agents: Map<string, MCPAgent> = new Map();
 
   constructor(
     private io: Server,
@@ -17,16 +18,10 @@ export class SocketRegistry {
   public initialize() {
     this.io.on('connection', async (socket: Socket) => {
       const sessionId = socket.handshake.query.sessionId as string;
-      const apiKey = socket.handshake.auth.token || process.env.GEMINI_API_KEY;
+      const clientToken = socket.handshake.auth.token;
 
       if (!sessionId) {
         socket.emit('error', 'Missing sessionId in query params');
-        socket.disconnect();
-        return;
-      }
-
-      if (!apiKey) {
-        socket.emit('error', 'Missing API Key');
         socket.disconnect();
         return;
       }
@@ -39,8 +34,7 @@ export class SocketRegistry {
         const sessionData = await this.sessionManager.acquireSession(sessionId);
 
         // 2. Initialize Agent
-        const agent = new GeminiAgent(
-          apiKey,
+        const agent = AgentFactory.createAgent(
           sessionId,
           sessionData,
           this.conversationRepo,
@@ -51,7 +45,8 @@ export class SocketRegistry {
             onToolApprovalRequired: (name, args, callId) => socket.emit('tool:approval_required', { name, args, callId }),
             onToolOutput: (output) => socket.emit('tool:output', output),
             onError: (err) => socket.emit('agent:error', err)
-          }
+          },
+          clientToken
         );
 
         await agent.initialize();
