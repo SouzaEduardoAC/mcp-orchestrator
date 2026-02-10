@@ -1,27 +1,24 @@
 # AI Context & Metadata
 > **Last Synced:** February 10, 2026
 > **System:** MCP Orchestrator
-> **Role:** Authority Documentation
+> **State:** Production-Ready Prototype
 
-## Core Technology Stack
-*   **Runtime:** Node.js (TypeScript)
-*   **Orchestration:** Docker (Container API)
-*   **State:** Redis (ioredis)
-*   **AI Model:** Google Gemini 2.0 Flash (`@google/generative-ai`)
-*   **Protocol:** Model Context Protocol (MCP) SDK (`@modelcontextprotocol/sdk`)
+## High-Density Summary
+Node.js/TypeScript orchestrator implementing the **Model Context Protocol (MCP)**. It provides a secure, human-in-the-loop bridge between **Google Gemini 2.0 Flash** and **hardened Docker containers**.
 
-## Dependency Graph
-*   **`src/index.ts`**
-    *   Imports: `AppServer`, `RedisFactory`, `DockerClient`, `SessionManager`, `JanitorService`, `SocketRegistry`.
-    *   Role: Bootstrapper, Dependency Injection Root.
-*   **`src/services/GeminiAgent.ts`**
-    *   Imports: `GoogleGenerativeAI`, `Client` (MCP), `DockerContainerTransport`.
-    *   Role: LLM Client, Tool Invocation Controller.
-*   **`src/services/SessionManager.ts`**
-    *   Imports: `DockerClient`, `SessionRepository`.
-    *   Role: Container Lifecycle Manager.
+## Technical Identity
+*   **Concurrency**: Distributed locking via Redis (ioredis).
+*   **Sandbox**: Dockerode (HostConfig limits + Network isolation).
+*   **Intelligence**: `@google/generative-ai` (Function Calling / Tool Use).
+*   **Communication**: `Socket.io` (Real-time updates & Tool Approvals).
 
-## Critical Constraints for Codebase Modification
-1.  **Session Isolation**: All tool execution MUST occur within the Docker container managed by `SessionManager`. Never execute arbitrary code on the host.
-2.  **Tool Approval**: The `GeminiAgent` logic enforces a `pendingCall` state. Tools cannot run without an explicit `executeTool` call (user approval flow).
-3.  **Stateless API**: `GeminiAgent` does not maintain internal history state; it relies on `ConversationRepository` (Redis) to rebuild context.
+## Dependency Roles
+*   **`@modelcontextprotocol/sdk`**: Provides the base for `DockerContainerTransport` and `MCP Client`.
+*   **`dockerode`**: Low-level Docker API management.
+*   **`redis`**: Backing store for `SessionRepository` and `ConversationRepository`.
+*   **`src/services/GeminiAgent.ts`**: The core ReAct orchestrator; handles tool normalization and UI event emission.
+
+## Execution Rules for Agents
+1.  **Always use `acquireSession`**: Never interact with Docker directly; use the manager to ensure locking and state tracking.
+2.  **Strict Isolation**: Containers must remain in `NetworkMode: 'none'`. Do not "fix" tool connectivity issues by enabling the network.
+3.  **History Integrity**: Always use `ConversationRepository` for chat context; the agent service is stateless across requests.

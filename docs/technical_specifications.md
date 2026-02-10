@@ -1,43 +1,33 @@
 # Technical Specifications
 
 ## 1. System Entry Points
-*   **Main Application**: `src/index.ts` (Function: `bootstrap`)
-    *   Initializes `RedisFactory`, `DockerClient`, `AppServer`.
-    *   Starts `JanitorService` for cleanup.
-    *   Binds `SocketRegistry` to HTTP server.
-*   **Session Management**: `src/services/SessionManager.ts`
-    *   `acquireSession(sessionId)`: Idempotent method. Returns existing session or spawns a new Docker container.
-*   **Agent Logic**: `src/services/GeminiAgent.ts`
-    *   `generateResponse(prompt)`: Core ReAct loop.
-    *   `executeTool(callId)`: Handles approved tool execution via MCP Client.
+*   **Application Boot**: `src/index.ts` (bootstrap). Initializes Redis, Docker, and the Janitor background service.
+*   **Real-time Interface**: `src/interfaces/socket/SocketRegistry.ts`. Maps WebSocket events to Agent actions.
+*   **Session Orchestration**: `src/services/SessionManager.ts`. Handles idempotent session acquisition with concurrency protection.
 
-## 2. State Management & Data Persistence
-The system uses **Redis** as the primary source of truth for ephemeral state.
+## 2. State & Concurrency Control
+*   **Distributed Locking**: 
+    *   **Mechanism**: `SessionRepository.acquireLock` uses Redis `SET {key} locked NX PX 30000`.
+    *   **Purpose**: Prevents "Thundering Herd" container spawning for the same `sessionId`.
+*   **Persistence**:
+    *   **Sessions**: Redis (`mcp:session:{id}`). Stores `containerId` and heartbeat.
+    *   **History**: Redis (`history:{id}`). Stores full chat context for Gemini's stateless API.
 
-*   **Sessions** (`RedisSessionRepository`):
-    *   Key: `session:{id}`
-    *   Data: `containerId`, `startTime`, `lastActive`.
-    *   Lifecycle: Managed by `SessionManager` and cleaned by `JanitorService`.
-*   **Conversations** (`RedisConversationRepository`):
-    *   Key: `history:{id}`
-    *   Data: List of message objects (`role`, `content`, `timestamp`).
-    *   Usage: Re-hydrated by `GeminiAgent` on every request.
+## 3. Sandbox Security Model
+*   **Resource Limits**: Configured in `DockerClient.spawnContainer`:
+    *   **Memory**: 512MB (`Memory: 536870912`).
+    *   **CPU**: 0.5 Cores (`NanoCpus: 500000000`).
+    *   **Network**: Isolated (`NetworkMode: 'none'`).
+*   **Transport**: `DockerContainerTransport` communicates via `stdin/stdout` using `docker exec` streams, avoiding network-based communication between host and guest.
 
-## 3. Infrastructure & Transport
-*   **Docker Integration**: `src/infrastructure/docker/DockerClient.ts` handles container lifecycle (`spawn`, `stop`, `get`).
-*   **MCP Transport**: `src/infrastructure/transport/DockerContainerTransport.ts`
-    *   Implements the Model Context Protocol transport layer.
-    *   Connects `GeminiAgent` (Host) to `mcp-server` (Container) via `docker exec` streams or similar mechanism.
+## 4. Error Matrix
+| Component | Failure | Recovery |
+|-----------|---------|----------|
+| `SessionManager` | Lock Timeout | Waits 2s, retries `getSession`, then fails. |
+| `DockerClient` | Resource Exhaustion | Throws `DockerError`, caught by Socket layer and reported to UI. |
+| `GeminiAgent` | Tool Mapping Error | Normalizes MCP names (e.g., `-` to `_`) to meet Gemini API specs. |
+| `JanitorService` | Termination Failure | Logs error; session remains for next cycle. |
 
-## 4. Error Handling Matrix
-| Component | Failure Mode | Handling Strategy |
-|-----------|--------------|-------------------|
-| `bootstrap` | Init Failure (Redis/Docker down) | Logs error, `process.exit(1)`. |
-| `SessionManager` | Container Spawn Fail | Throws error, propagated to Socket. |
-| `GeminiAgent` | Model API Error | Caught in `generateResponse`, emits `onError` event. |
-| `GeminiAgent` | Tool Execution Fail | Caught in `executeTool`, emits `onError`, clears pending call. |
-
-## 5. Complexity & Constraints
-*   **Context Window**: `GeminiAgent` rebuilds the full chat history for the Gemini API on every turn. Large histories will increase latency and token costs (O(N)).
-*   **Concurrency**: `SessionManager` currently lacks distributed locking (marked as `TODO`). Race conditions possible on simultaneous `acquireSession` for the same ID.
-*   **Docker Latency**: Container startup (cold start) is the significant bottleneck for new sessions.
+## 5. Complexity & Performance
+*   **Session Cold Start**: High (Docker `create` + `start`). Reduced by session reuse.
+*   **Context Rebuilding**: O(N) where N is history length. The `GeminiAgent` sends the entire history to the model on every turn to maintain state.

@@ -1,16 +1,23 @@
 # MCP Orchestrator
 
-> **Secure, Dockerized AI Agent Runtime**
+> **Secure, Hardened, and Human-in-the-Loop AI Tool Execution**
 
-The **MCP Orchestrator** is a Node.js application that bridges Google's Gemini 2.0 Flash model with a sandboxed environment. It utilizes the **Model Context Protocol (MCP)** to allow the AI to safely discover and execute tools within isolated Docker containers.
+The **MCP Orchestrator** is a specialized runtime that allows Google's Gemini models to interact with the physical world (files, shell, APIs) via isolated, resource-constrained Docker containers.
 
-## 📚 Documentation
-*   [**Business Flow**](./docs/business_flow.md): High-level architecture and user journey.
-*   [**Technical Specs**](./docs/technical_specifications.md): Deep dive into classes, state management, and error handling.
-*   [**AI Context**](./docs/ai_context.md): Machine-optimized summary of the stack.
+## 📚 Authoritative Documentation
+*   [**Business Flow**](./docs/business_flow.md): Understand the user journey and high-level logic.
+*   [**Technical Specifications**](./docs/technical_specifications.md): Deep dive into locking, security, and infrastructure.
+*   [**AI Context**](./docs/ai_context.md): Machine-readable summary for developers and AI agents.
 
-## Key Features
-*   **Sandboxed Execution**: Every session gets a dedicated `mcp-server` Docker container.
-*   **Human-in-the-Loop**: Tool calls require explicit user approval via the socket interface.
-*   **State Persistence**: Redis-backed session and conversation storage.
-*   **Gemini 2.0 Integration**: Uses the latest multimodal models for high-speed reasoning.
+## Core Features
+- 🔒 **Hardened Sandboxes**: Containers run with 512MB RAM, 0.5 CPU, and **no network access**.
+- 🤝 **Human-in-the-Loop**: Tool calls pause for user approval via a real-time Vue.js UI.
+- ⚡ **Concurrency Safe**: Distributed locking prevents container duplication.
+- 🧠 **Gemini 2.0 Native**: Optimized for the latest multimodal reasoning and function calling capabilities.
+
+## Quick Start
+1.  Ensure Docker and Redis are running.
+2.  Install dependencies: `npm install`
+3.  Set `GOOGLE_API_KEY` in `.env`.
+4.  Start the system: `npm run build && npm start`
+5.  Visit `http://localhost:3000`.
