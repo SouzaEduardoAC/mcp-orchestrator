@@ -1,44 +1,38 @@
-# Business Flow & Stakeholder Overview
+# Business Flow: MCP Orchestrator
 
-## Narrative Overview
-The **MCP Orchestrator** is a secure execution environment for AI agents. It bridges high-level reasoning from Google's Gemini model with low-level tool execution in isolated Docker containers.
+## Overview
+The MCP Orchestrator is a middleware service that enables Large Language Models (LLMs) to interact with isolated environments via the Model Context Protocol (MCP). It manages user sessions, persists conversation history, and coordinates the execution of tools within ephemeral Docker containers.
 
-1.  **Session Acquisition**: When a user connects, the system retrieves or creates a session. To prevent resource duplication, it uses a **Distributed Lock** (Redis) to ensure only one container is spawned per session ID even under high concurrency.
-2.  **Sandbox Provisioning**: If a new session is needed, the **SessionManager** instructs the **DockerClient** to spawn a container. This container is "Hardened": it has no network access and strict CPU/Memory limits.
-3.  **Conversational Loop**: The **GeminiAgent** manages the chat. It pulls context from the **ConversationRepository** and presents the user's prompt alongside available tools (discovered via the **Model Context Protocol**) to the Gemini model.
-4.  **Human-in-the-Loop Approval**: If Gemini requests a tool execution, the orchestrator pauses. The user must explicitly **Approve** or **Reject** the action via the UI.
-5.  **Secure Execution**: Upon approval, the tool runs inside the isolated container. The result is returned to Gemini for final interpretation and then sent to the user.
+## Stakeholder Journey
+1. **User Connection**: A user (or client application) connects via WebSockets, providing a unique `sessionId`.
+2. **Environment Provisioning**: The system acquires a dedicated Docker container for the session. If the container doesn't exist, it is spawned automatically.
+3. **Agent Personalization**: Based on the `LLM_PROVIDER` configuration, the system instantiates an agent (Gemini, Claude, or ChatGPT).
+4. **Conversational Loop**:
+    - User sends a prompt.
+    - Agent retrieves conversation history from Redis.
+    - Agent discovers available tools within the Dockerized MCP server.
+    - LLM generates a response or requests a tool execution.
+5. **Human-in-the-Loop (HITL)**: If a tool execution is requested, the system pauses for user approval.
+6. **Tool Execution**: Upon approval, the tool is executed inside the secure container, and results are fed back to the LLM.
 
-## Logic Flowchart
+## Logical Flow Chart
 
 ```mermaid
-flowchart TD
-    User([User / UI]) <-->|Socket.io| SocketRegistry
+graph TD
+    User((User)) -->|Connect| Socket[Socket Registry]
+    Socket -->|Acquire| SessionManager[Session Manager]
+    SessionManager -->|Spawn/Get| Docker[(Docker Container)]
+    Socket -->|Init| Factory[Agent Factory]
+    Factory -->|Select Provider| LLM{LLM Provider}
     
-    subgraph Orchestrator [Node.js Backend]
-        SocketRegistry --> SessionManager
-        SessionManager --> Lock{Redis Lock?}
-        Lock -- Yes --> DockerClient
-        Lock -- No --> Retry[Wait & Retry]
-        
-        SocketRegistry --> GeminiAgent
-        GeminiAgent <-->|ReAct Loop| MCPClient[MCP SDK Client]
-    end
+    User -->|Message| Agent[MCP Agent]
+    Agent -->|Fetch History| Redis[(Redis Cache)]
+    Agent -->|List Tools| MCP[MCP Server in Docker]
+    Agent -->|Generate| LLM
     
-    subgraph Infrastructure
-        Redis[(Redis Store)]
-        DockerClient -- Spawns --> Sandbox
-    end
-    
-    subgraph Sandbox [Isolated Docker Container]
-        MCPServer[MCP Server]
-        MCPServer -.->|Tool Exec| LocalFS[(Restricted FS)]
-    end
-    
-    subgraph AI [External Services]
-        GeminiAgent <-->|API| GoogleGemini
-    end
-
-    %% Security Constraints
-    Sandbox -.->|No Network| Internet((Internet))
+    LLM -->|Response| User
+    LLM -->|Tool Call| HITL{Approval Needed?}
+    HITL -->|Approved| Agent
+    Agent -->|Execute| MCP
+    MCP -->|Result| LLM
 ```

@@ -1,24 +1,26 @@
-# AI Context & Metadata
-> **Last Synced:** February 10, 2026
-> **System:** MCP Orchestrator
-> **State:** Production-Ready Prototype
+# AI Context: MCP Orchestrator
 
-## High-Density Summary
-Node.js/TypeScript orchestrator implementing the **Model Context Protocol (MCP)**. It provides a secure, human-in-the-loop bridge between **Google Gemini 2.0 Flash** and **hardened Docker containers**.
+## Metadata
+- **Analysis Date**: 2026-02-10
+- **Architectural Style**: Modular Monolith with Strategy Pattern (LLM Providers)
+- **Primary Tech Stack**: Node.js, TypeScript, Docker, Redis, Socket.io, MCP SDK
 
-## Technical Identity
-*   **Concurrency**: Distributed locking via Redis (ioredis).
-*   **Sandbox**: Dockerode (HostConfig limits + Network isolation).
-*   **Intelligence**: `@google/generative-ai` (Function Calling / Tool Use).
-*   **Communication**: `Socket.io` (Real-time updates & Tool Approvals).
+## Dependency Map
+| Import | Role |
+|---|---|
+| `@modelcontextprotocol/sdk` | Core protocol for tool discovery and execution. |
+| `dockerode` | programmatic control of ephemeral tool-execution environments. |
+| `redis` | High-speed persistence for sessions and chat history. |
+| `socket.io` | Real-time bidirectional communication with clients. |
+| `@google/generative-ai` | Gemini 2.0 integration. |
+| `@anthropic-ai/sdk` | Claude 3.5 Sonnet integration. |
+| `openai` | GPT-4o integration. |
 
-## Dependency Roles
-*   **`@modelcontextprotocol/sdk`**: Provides the base for `DockerContainerTransport` and `MCP Client`.
-*   **`dockerode`**: Low-level Docker API management.
-*   **`redis`**: Backing store for `SessionRepository` and `ConversationRepository`.
-*   **`src/services/GeminiAgent.ts`**: The core ReAct orchestrator; handles tool normalization and UI event emission.
+## Machine-Readable Summary
+The system is an **MCP-to-LLM bridge**. It abstracts model-specific SDKs behind the `LLMProvider` interface. The `MCPAgent` acts as the orchestrator, managing a 4-way sync between:
+1. The Client (via Socket.io)
+2. The LLM (via LLMProvider)
+3. The Tool Environment (via DockerContainerTransport)
+4. The State (via Redis)
 
-## Execution Rules for Agents
-1.  **Always use `acquireSession`**: Never interact with Docker directly; use the manager to ensure locking and state tracking.
-2.  **Strict Isolation**: Containers must remain in `NetworkMode: 'none'`. Do not "fix" tool connectivity issues by enabling the network.
-3.  **History Integrity**: Always use `ConversationRepository` for chat context; the agent service is stateless across requests.
+`LLM_PROVIDER` environment variable dictates the active strategy. `clientToken` (passed via Socket auth) can override server-side API keys.
