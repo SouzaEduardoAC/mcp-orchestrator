@@ -1,25 +1,16 @@
 # MCP Orchestrator
 
-Dynamic MCP Orchestrator that bridges AI models with isolated MCP servers running in Docker containers.
+> **Secure, Dockerized AI Agent Runtime**
 
-## 📚 System Documentation
-- **[Business Logic & Architecture](docs/ARCHITECTURE.md)** - High-level flow and diagrams.
-- **[Technical Implementation](docs/TECHNICAL_SPECS.md)** - Deep dive into services and infrastructure.
-- **[AI Context](docs/AI_CONTEXT.md)** - Token-optimized context for AI agents.
+The **MCP Orchestrator** is a Node.js application that bridges Google's Gemini 2.0 Flash model with a sandboxed environment. It utilizes the **Model Context Protocol (MCP)** to allow the AI to safely discover and execute tools within isolated Docker containers.
 
-## Getting Started
+## 📚 Documentation
+*   [**Business Flow**](./docs/business_flow.md): High-level architecture and user journey.
+*   [**Technical Specs**](./docs/technical_specifications.md): Deep dive into classes, state management, and error handling.
+*   [**AI Context**](./docs/ai_context.md): Machine-optimized summary of the stack.
 
-### Prerequisites
-- Node.js (v18+)
-- Docker
-- Redis
-
-### Installation
-```bash
-npm install
-```
-
-### Running Tests
-```bash
-npm test
-```
+## Key Features
+*   **Sandboxed Execution**: Every session gets a dedicated `mcp-server` Docker container.
+*   **Human-in-the-Loop**: Tool calls require explicit user approval via the socket interface.
+*   **State Persistence**: Redis-backed session and conversation storage.
+*   **Gemini 2.0 Integration**: Uses the latest multimodal models for high-speed reasoning.
