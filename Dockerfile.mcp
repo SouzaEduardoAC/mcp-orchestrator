@@ -1,0 +1,8 @@
+FROM node:22-alpine
+
+# Simple placeholder script that keeps the container alive
+# and echoes "MCP Server Ready" to stderr so logs show up.
+# It reads stdin to avoid breaking pipes, but does nothing with it.
+RUN echo 'console.error("MCP Server Placeholder Started"); process.stdin.resume();' > /app.js
+
+CMD ["node", "/app.js"]
