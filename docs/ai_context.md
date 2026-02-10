@@ -24,3 +24,5 @@ The system is an **MCP-to-LLM bridge**. It abstracts model-specific SDKs behind 
 4. The State (via Redis)
 
 `LLM_PROVIDER` environment variable dictates the active strategy. `clientToken` (passed via Socket auth) can override server-side API keys.
+
+The Client UI is **provider-aware**: it receives the provider type on connection and dynamically adjusts its branding and prompts.

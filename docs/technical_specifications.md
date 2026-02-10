@@ -2,8 +2,12 @@
 
 ## 1. Entry Points
 - **Bootstrap (`src/index.ts`)**: Initializes infrastructure (Redis, Docker), starts domain services, and binds the Socket interface.
-- **SocketRegistry (`src/interfaces/socket/SocketRegistry.ts`)**: The primary real-time entry point. Handles connection, authentication tokens, and event routing (`message`, `tool:approval`).
-- **AgentFactory (`src/services/factories/AgentFactory.ts`)**: Static factory that determines which `LLMProvider` implementation to use based on the `LLM_PROVIDER` environment variable.
+- **SocketRegistry (`src/interfaces/socket/SocketRegistry.ts`)**: The primary real-time entry point. 
+    - Emits `system:ready` with `{ provider: string }` payload for UI customization.
+    - Handles connection, authentication tokens, and event routing (`message`, `tool:approval`).
+- **AgentFactory (`src/services/factories/AgentFactory.ts`)**: 
+    - `createAgent()`: Instantiates the specific `LLMProvider` based on env vars.
+    - `getProviderType()`: Returns the normalized provider string (e.g., 'gemini', 'claude').
 
 ## 2. State Changes & Persistence
 - **Redis (Cache/Store)**:

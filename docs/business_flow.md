@@ -6,7 +6,10 @@ The MCP Orchestrator is a middleware service that enables Large Language Models 
 ## Stakeholder Journey
 1. **User Connection**: A user (or client application) connects via WebSockets, providing a unique `sessionId`.
 2. **Environment Provisioning**: The system acquires a dedicated Docker container for the session. If the container doesn't exist, it is spawned automatically.
-3. **Agent Personalization**: Based on the `LLM_PROVIDER` configuration, the system instantiates an agent (Gemini, Claude, or ChatGPT).
+3. **Agent Personalization**: 
+    - The system determines the active `LLM_PROVIDER` (Gemini, Claude, or ChatGPT).
+    - It informs the client UI of the active provider via the `system:ready` event.
+    - The client UI updates its branding (Title, Placeholder) to match the provider.
 4. **Conversational Loop**:
     - User sends a prompt.
     - Agent retrieves conversation history from Redis.
@@ -22,13 +25,14 @@ graph TD
     User((User)) -->|Connect| Socket[Socket Registry]
     Socket -->|Acquire| SessionManager[Session Manager]
     SessionManager -->|Spawn/Get| Docker[(Docker Container)]
-    Socket -->|Init| Factory[Agent Factory]
-    Factory -->|Select Provider| LLM{LLM Provider}
+    Socket -->|Get Provider| Factory[Agent Factory]
+    Factory -->|Return Type| Socket
+    Socket -->|system:ready| UI[Client UI]
     
     User -->|Message| Agent[MCP Agent]
     Agent -->|Fetch History| Redis[(Redis Cache)]
     Agent -->|List Tools| MCP[MCP Server in Docker]
-    Agent -->|Generate| LLM
+    Agent -->|Generate| LLM{LLM Provider}
     
     LLM -->|Response| User
     LLM -->|Tool Call| HITL{Approval Needed?}

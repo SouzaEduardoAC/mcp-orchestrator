@@ -10,6 +10,18 @@ The system is now provider-agnostic. Toggle between the world's leading models v
 - **Anthropic Claude 3.5 Sonnet**
 - **OpenAI GPT-4o**
 
+## 📚 Authoritative Documentation
+*   [**Business Flow**](./docs/business_flow.md): Understand the user journey and high-level logic.
+*   [**Technical Specifications**](./docs/technical_specifications.md): Deep dive into provider interfaces, locking, and infrastructure.
+*   [**AI Context**](./docs/ai_context.md): Machine-readable summary for developers and AI agents.
+
+## Core Features
+- 🔒 **Hardened Sandboxes**: Containers run with strict resource limits and security profiles.
+- 🤝 **Human-in-the-Loop**: Tool calls pause for user approval via real-time WebSocket events.
+- ⚡ **Concurrency Safe**: Distributed locking and session management via Redis.
+- 🧩 **Strategy Pattern**: Decoupled LLM logic from MCP orchestration.
+- 🎨 **Dynamic UI**: Frontend automatically adapts branding and prompts to the active LLM provider.
+
 ## 🚀 Raising the Environment
 
 ### 1. Prerequisites
@@ -42,19 +54,3 @@ If you prefer running the Node.js process directly:
 
 ### 5. Verify the Connection
 Once the server is running on `http://localhost:3000`, you can connect via WebSocket (Socket.io) to start a session.
-
-## 📚 Authoritative Documentation
-*   [**Business Flow**](./docs/business_flow.md): Understand the user journey and high-level logic.
-*   [**Technical Specifications**](./docs/technical_specifications.md): Deep dive into provider interfaces, locking, and infrastructure.
-*   [**AI Context**](./docs/ai_context.md): Machine-readable summary for developers and AI agents.
-
-## Core Features
-- 🔒 **Hardened Sandboxes**: Containers run with strict resource limits and security profiles.
-- 🤝 **Human-in-the-Loop**: Tool calls pause for user approval via real-time WebSocket events.
-- ⚡ **Concurrency Safe**: Distributed locking and session management via Redis.
-- 🧩 **Strategy Pattern**: Decoupled LLM logic from MCP orchestration.
-
-## Quick Start
-1.  Ensure Docker and Redis are running.
-2.  Set `LLM_PROVIDER` (e.g., `claude`) and relevant API Key in `.env`.
-3.  Install & Start: `npm install && npm run build && npm start`
