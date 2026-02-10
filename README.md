@@ -10,6 +10,39 @@ The system is now provider-agnostic. Toggle between the world's leading models v
 - **Anthropic Claude 3.5 Sonnet**
 - **OpenAI GPT-4o**
 
+## 🚀 Raising the Environment
+
+### 1. Prerequisites
+- **Docker & Docker Compose** installed.
+- **Node.js 22+** (if running locally without Docker).
+- **Redis** (if running locally without Docker).
+
+### 2. Configuration
+Create a `.env` file in the root directory:
+```env
+LLM_PROVIDER=gemini # choices: gemini, claude, openai
+GEMINI_API_KEY=your_key_here
+ANTHROPIC_API_KEY=your_key_here
+OPENAI_API_KEY=your_key_here
+```
+
+### 3. Start with Docker Compose (Recommended)
+This is the easiest way to start the system, including the Redis instance and the MCP placeholder image:
+```bash
+docker-compose up --build
+```
+*Note: The `mcp-placeholder` service builds the `mcp-server:latest` image used by the orchestrator for session containers.*
+
+### 4. Start Locally (Development)
+If you prefer running the Node.js process directly:
+1. Start Redis: `docker run -p 6379:6379 -d redis:alpine`
+2. Build the MCP template: `docker build -t mcp-server:latest -f Dockerfile.mcp .`
+3. Install dependencies: `npm install`
+4. Start dev mode: `npm run dev`
+
+### 5. Verify the Connection
+Once the server is running on `http://localhost:3000`, you can connect via WebSocket (Socket.io) to start a session.
+
 ## 📚 Authoritative Documentation
 *   [**Business Flow**](./docs/business_flow.md): Understand the user journey and high-level logic.
 *   [**Technical Specifications**](./docs/technical_specifications.md): Deep dive into provider interfaces, locking, and infrastructure.

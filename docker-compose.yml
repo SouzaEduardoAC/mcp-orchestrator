@@ -28,7 +28,10 @@ services:
       - "3000:3000"
     environment:
       - REDIS_URL=redis://redis:6379
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
       - PORT=3000
     volumes:
       # Critical: Allows the Orchestrator to spawn sibling containers
