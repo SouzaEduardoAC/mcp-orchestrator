@@ -74,7 +74,11 @@ export class SocketRegistry {
            // The Janitor will clean it up if they don't come back.
         });
 
-        socket.emit('system:ready', { sessionId, containerId: sessionData.containerId });
+        socket.emit('system:ready', { 
+            sessionId, 
+            containerId: sessionData.containerId,
+            provider: AgentFactory.getProviderType()
+        });
 
       } catch (err: any) {
         console.error(`[Socket] Initialization error for ${sessionId}`, err);

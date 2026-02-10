@@ -24,7 +24,7 @@
         
         <!-- Header -->
         <header class="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
-            <h1 class="text-xl font-bold text-blue-400">Gemini MCP Orchestrator</h1>
+            <h1 class="text-xl font-bold text-blue-400">{{ providerName }} MCP Orchestrator</h1>
             <div class="text-xs px-2 py-1 rounded" :class="isConnected ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'">
                 {{ isConnected ? 'Connected' : 'Disconnected' }}
             </div>
@@ -101,7 +101,7 @@
                 <input 
                     v-model="inputMessage" 
                     type="text" 
-                    placeholder="Ask Gemini to use a tool..." 
+                    :placeholder="'Ask ' + providerName + ' to use a tool...'" 
                     class="flex-1 bg-gray-800 border border-gray-700 text-white rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 transition"
                     :disabled="!isConnected || isThinking"
                 >
@@ -128,11 +128,12 @@
                 const inputMessage = ref('');
                 const chatContainer = ref(null);
                 const isThinking = ref(false);
+                const providerName = ref('LLM');
 
                 // Generate a random session ID for demo
                 const sessionId = 'session-' + Math.random().toString(36).substr(2, 9);
                 // In real app, prompt for key or handle auth
-                const apiKey = prompt("Enter Gemini API Key (or leave blank to use server env if allowed):", "") || "";
+                const apiKey = prompt("Enter API Key (or leave blank to use server env if allowed):", "") || "";
 
                 const scrollToBottom = () => {
                     nextTick(() => {
@@ -151,6 +152,13 @@
                     socket.value.on('connect', () => {
                         isConnected.value = true;
                         console.log('Connected');
+                    });
+
+                    socket.value.on('system:ready', (data) => {
+                        if (data.provider) {
+                            // Capitalize first letter
+                            providerName.value = data.provider.charAt(0).toUpperCase() + data.provider.slice(1);
+                        }
                     });
 
                     socket.value.on('disconnect', () => {
@@ -235,7 +243,8 @@
                     sendMessage,
                     approveTool,
                     rejectTool,
-                    isThinking
+                    isThinking,
+                    providerName
                 };
             }
         }).mount('#app');

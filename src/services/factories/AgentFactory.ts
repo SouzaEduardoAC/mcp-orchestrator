@@ -53,4 +53,8 @@ export class AgentFactory {
       events
     );
   }
+
+  static getProviderType(): string {
+    return (process.env.LLM_PROVIDER || 'gemini').toLowerCase();
+  }
 }
