@@ -54,4 +54,27 @@ export class DockerClient {
           });
       });
   }
+
+  /**
+   * Stops and removes a container by ID.
+   * @param containerId The ID of the container to stop.
+   */
+  async stopContainer(containerId: string): Promise<void> {
+      const container = this.docker.getContainer(containerId);
+      try {
+          await container.stop();
+      } catch (e: any) {
+          // Ignore if already stopped (304) or not found (404)
+          if (e.statusCode !== 304 && e.statusCode !== 404) throw e;
+      }
+      try {
+          await container.remove();
+      } catch (e: any) {
+           if (e.statusCode !== 404) throw e;
+      }
+  }
+
+  getContainer(containerId: string): Docker.Container {
+      return this.docker.getContainer(containerId);
+  }
 }
