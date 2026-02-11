@@ -164,17 +164,27 @@ llm mcp health
 - `cli/utils/prompts.ts` - Inquirer prompts
 
 ### Web Dashboard (`public/index.html`)
-**Purpose**: Visual monitoring interface
+**Purpose**: Visual monitoring and management interface
 
 **Features**:
 - **Chat Tab**: LLM conversation with tool approval
 - **MCP Management Tab**:
   - Summary cards (Total, Healthy, Issues)
+  - **Add MCP Button**: Create new MCP servers via web form
   - Real-time MCP list with status
   - Health indicators (✓ ⚠ ↻ ✗)
   - Last check/success timestamps
   - Error messages and failure counts
   - Manual refresh button
+
+**Add MCP Modal**:
+- Full-screen modal form with dynamic fields
+- Transport type selector (HTTP, SSE, Stdio, Stdio-Docker)
+- Transport-specific fields (URL, command, container image)
+- Custom headers support (HTTP/SSE)
+- Resource limits configuration (Stdio-Docker)
+- Client-side validation matching CLI patterns
+- Error display and loading states
 
 **Technology**: Vue 3 Composition API, TailwindCSS
 
@@ -238,6 +248,35 @@ Returns health status for all MCPs:
   }]
 }
 ```
+
+### POST /api/mcp/add
+Adds a new MCP server to the registry:
+
+**Request**:
+```json
+{
+  "name": "my-mcp",
+  "config": {
+    "transport": "http",
+    "url": "https://example.com/mcp",
+    "enabled": true,
+    "description": "My MCP server"
+  }
+}
+```
+
+**Validation**:
+- Name: `/^[a-zA-Z0-9-_]+$/`
+- Transport: `http | sse | stdio | stdio-docker`
+- HTTP/SSE: requires `url` (must start with `http://` or `https://`)
+- Stdio: requires `command`
+- Stdio-Docker: requires `containerImage`
+
+**Responses**:
+- `201`: Success - `{"message": "MCP server added successfully", "name": "my-mcp"}`
+- `400`: Validation error
+- `409`: Duplicate MCP name
+- `500`: Server error
 
 ### GET /api/models/available
 Returns accessible LLM models based on API key
@@ -330,8 +369,10 @@ interface MCPHealth {
 - Tabbed interface (Chat + Management)
 - Real-time health dashboard
 - Summary cards and MCP list
+- **Add MCP modal form** (all transport types)
 - Status indicators and timestamps
 - CLI quick start guide
+- API endpoint for adding MCPs (`POST /api/mcp/add`)
 
 ## Project Structure
 
@@ -381,6 +422,14 @@ Dockerfile.mcp                # Default MCP server
 ## Common Operations
 
 ### Adding MCP
+
+**Via Web UI** (Recommended):
+1. Open http://localhost:3000
+2. Click "🔧 MCP Management" tab
+3. Click "+ Add MCP" button
+4. Fill form and submit
+
+**Via CLI**:
 ```bash
 # Interactive
 llm mcp add
@@ -390,6 +439,13 @@ llm mcp add my-server \
   --transport stdio-docker \
   --image mcp-server:latest \
   --description "Custom MCP"
+```
+
+**Via API**:
+```bash
+curl -X POST http://localhost:3000/api/mcp/add \
+  -H "Content-Type: application/json" \
+  -d '{"name":"my-mcp","config":{"transport":"http","url":"https://example.com","enabled":true}}'
 ```
 
 ### Monitoring Health

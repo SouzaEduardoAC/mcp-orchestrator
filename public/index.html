@@ -206,9 +206,14 @@
             <div class="bg-gray-800 rounded-lg border border-gray-700">
                 <div class="p-4 border-b border-gray-700 flex justify-between items-center">
                     <h2 class="text-lg font-semibold">MCP Servers</h2>
-                    <button @click="refreshHealth" class="text-sm bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded transition">
-                        🔄 Refresh
-                    </button>
+                    <div class="flex space-x-2">
+                        <button @click="openAddMcpModal" class="text-sm bg-green-600 hover:bg-green-500 px-4 py-1 rounded transition">
+                            + Add MCP
+                        </button>
+                        <button @click="refreshHealth" class="text-sm bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded transition">
+                            🔄 Refresh
+                        </button>
+                    </div>
                 </div>
 
                 <div v-if="mcpLoading" class="p-8 text-center text-gray-400">
@@ -247,6 +252,238 @@
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <!-- Add MCP Modal -->
+            <div v-if="addMcpModalOpen" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50" @click.self="closeAddMcpModal">
+                <div class="bg-gray-800 rounded-lg border border-gray-700 w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold text-blue-400">Add MCP Server</h2>
+                        <button @click="closeAddMcpModal" :disabled="mcpFormLoading" class="text-gray-400 hover:text-white text-2xl disabled:opacity-50">
+                            ×
+                        </button>
+                    </div>
+
+                    <!-- Error Display -->
+                    <div v-if="mcpFormError" class="mb-4 p-3 bg-red-900/50 border border-red-700 rounded text-red-200 text-sm">
+                        {{ mcpFormError }}
+                    </div>
+
+                    <form @submit.prevent="submitAddMcp" class="space-y-4">
+                        <!-- Name Field -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-300 mb-2">
+                                Name <span class="text-red-400">*</span>
+                            </label>
+                            <input
+                                v-model="mcpForm.name"
+                                type="text"
+                                placeholder="my-mcp-server"
+                                class="w-full bg-gray-900 border border-gray-600 text-white rounded px-3 py-2 focus:outline-none focus:border-blue-500 disabled:opacity-50"
+                                :disabled="mcpFormLoading"
+                            >
+                            <p class="text-xs text-gray-500 mt-1">Letters, numbers, hyphens, and underscores only</p>
+                        </div>
+
+                        <!-- Transport Type Selector -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-300 mb-2">
+                                Transport Type <span class="text-red-400">*</span>
+                            </label>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button
+                                    v-for="type in transportTypes"
+                                    :key="type.value"
+                                    type="button"
+                                    @click="mcpForm.transport = type.value"
+                                    :disabled="mcpFormLoading"
+                                    :class="mcpForm.transport === type.value ? 'bg-blue-600 border-blue-500' : 'bg-gray-900 border-gray-600 hover:border-gray-500'"
+                                    class="border rounded px-3 py-2 text-left transition disabled:opacity-50"
+                                >
+                                    <div class="font-medium">{{ type.label }}</div>
+                                    <div class="text-xs text-gray-400">{{ type.description }}</div>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Description Field -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-300 mb-2">
+                                Description <span class="text-gray-500">(optional)</span>
+                            </label>
+                            <input
+                                v-model="mcpForm.description"
+                                type="text"
+                                placeholder="Brief description of this MCP server"
+                                class="w-full bg-gray-900 border border-gray-600 text-white rounded px-3 py-2 focus:outline-none focus:border-blue-500 disabled:opacity-50"
+                                :disabled="mcpFormLoading"
+                            >
+                        </div>
+
+                        <!-- HTTP/SSE Fields -->
+                        <div v-if="mcpForm.transport === 'http' || mcpForm.transport === 'sse'">
+                            <label class="block text-sm font-medium text-gray-300 mb-2">
+                                URL <span class="text-red-400">*</span>
+                            </label>
+                            <input
+                                v-model="mcpForm.url"
+                                type="text"
+                                placeholder="https://example.com/mcp"
+                                class="w-full bg-gray-900 border border-gray-600 text-white rounded px-3 py-2 focus:outline-none focus:border-blue-500 disabled:opacity-50"
+                                :disabled="mcpFormLoading"
+                            >
+
+                            <!-- Custom Headers -->
+                            <div class="mt-4">
+                                <div class="flex justify-between items-center mb-2">
+                                    <label class="text-sm font-medium text-gray-300">
+                                        Custom Headers <span class="text-gray-500">(optional)</span>
+                                    </label>
+                                    <button
+                                        type="button"
+                                        @click="addHeader"
+                                        :disabled="mcpFormLoading"
+                                        class="text-xs bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded transition disabled:opacity-50"
+                                    >
+                                        + Add Header
+                                    </button>
+                                </div>
+                                <div v-for="(header, index) in mcpForm.headers" :key="index" class="flex space-x-2 mb-2">
+                                    <input
+                                        v-model="header.key"
+                                        type="text"
+                                        placeholder="Header name"
+                                        class="flex-1 bg-gray-900 border border-gray-600 text-white rounded px-3 py-2 focus:outline-none focus:border-blue-500 text-sm disabled:opacity-50"
+                                        :disabled="mcpFormLoading"
+                                    >
+                                    <input
+                                        v-model="header.value"
+                                        type="text"
+                                        placeholder="Header value"
+                                        class="flex-1 bg-gray-900 border border-gray-600 text-white rounded px-3 py-2 focus:outline-none focus:border-blue-500 text-sm disabled:opacity-50"
+                                        :disabled="mcpFormLoading"
+                                    >
+                                    <button
+                                        type="button"
+                                        @click="removeHeader(index)"
+                                        :disabled="mcpFormLoading"
+                                        class="bg-red-900/50 hover:bg-red-800 text-red-200 px-3 py-2 rounded transition text-sm disabled:opacity-50"
+                                    >
+                                        Remove
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Stdio Fields -->
+                        <div v-if="mcpForm.transport === 'stdio'" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2">
+                                    Command <span class="text-red-400">*</span>
+                                </label>
+                                <input
+                                    v-model="mcpForm.command"
+                                    type="text"
+                                    placeholder="node"
+                                    class="w-full bg-gray-900 border border-gray-600 text-white rounded px-3 py-2 focus:outline-none focus:border-blue-500 disabled:opacity-50"
+                                    :disabled="mcpFormLoading"
+                                >
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2">
+                                    Arguments <span class="text-gray-500">(optional, space-separated)</span>
+                                </label>
+                                <input
+                                    v-model="mcpForm.args"
+                                    type="text"
+                                    placeholder="server.js --port 3000"
+                                    class="w-full bg-gray-900 border border-gray-600 text-white rounded px-3 py-2 focus:outline-none focus:border-blue-500 disabled:opacity-50"
+                                    :disabled="mcpFormLoading"
+                                >
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2">
+                                    Working Directory <span class="text-gray-500">(optional)</span>
+                                </label>
+                                <input
+                                    v-model="mcpForm.cwd"
+                                    type="text"
+                                    placeholder="/path/to/directory"
+                                    class="w-full bg-gray-900 border border-gray-600 text-white rounded px-3 py-2 focus:outline-none focus:border-blue-500 disabled:opacity-50"
+                                    :disabled="mcpFormLoading"
+                                >
+                            </div>
+                        </div>
+
+                        <!-- Stdio-Docker Fields -->
+                        <div v-if="mcpForm.transport === 'stdio-docker'" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2">
+                                    Container Image <span class="text-red-400">*</span>
+                                </label>
+                                <input
+                                    v-model="mcpForm.containerImage"
+                                    type="text"
+                                    placeholder="mcp-server:latest"
+                                    class="w-full bg-gray-900 border border-gray-600 text-white rounded px-3 py-2 focus:outline-none focus:border-blue-500 disabled:opacity-50"
+                                    :disabled="mcpFormLoading"
+                                >
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-300 mb-2">
+                                        Memory Limit (MB)
+                                    </label>
+                                    <input
+                                        v-model.number="mcpForm.containerMemory"
+                                        type="number"
+                                        min="128"
+                                        placeholder="512"
+                                        class="w-full bg-gray-900 border border-gray-600 text-white rounded px-3 py-2 focus:outline-none focus:border-blue-500 disabled:opacity-50"
+                                        :disabled="mcpFormLoading"
+                                    >
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-300 mb-2">
+                                        CPU Limit (cores)
+                                    </label>
+                                    <input
+                                        v-model.number="mcpForm.containerCpu"
+                                        type="number"
+                                        min="0.1"
+                                        step="0.1"
+                                        placeholder="0.5"
+                                        class="w-full bg-gray-900 border border-gray-600 text-white rounded px-3 py-2 focus:outline-none focus:border-blue-500 disabled:opacity-50"
+                                        :disabled="mcpFormLoading"
+                                    >
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Form Buttons -->
+                        <div class="flex space-x-3 pt-4 border-t border-gray-700">
+                            <button
+                                type="button"
+                                @click="closeAddMcpModal"
+                                :disabled="mcpFormLoading"
+                                class="flex-1 bg-gray-700 hover:bg-gray-600 text-white py-2 rounded transition disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                :disabled="mcpFormLoading"
+                                class="flex-1 bg-green-600 hover:bg-green-500 text-white py-2 rounded transition disabled:opacity-50 flex items-center justify-center"
+                            >
+                                <svg v-if="mcpFormLoading" class="animate-spin h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                {{ mcpFormLoading ? 'Adding...' : 'Add MCP Server' }}
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
 
@@ -295,6 +532,30 @@
                 // MCP Management
                 const healthData = ref({ summary: {}, mcps: [] });
                 const mcpLoading = ref(false);
+
+                // Add MCP Modal
+                const addMcpModalOpen = ref(false);
+                const mcpFormLoading = ref(false);
+                const mcpFormError = ref('');
+                const mcpForm = ref({
+                    name: '',
+                    transport: 'http',
+                    description: '',
+                    url: '',
+                    headers: [],
+                    command: '',
+                    args: '',
+                    cwd: '',
+                    containerImage: '',
+                    containerMemory: 512,
+                    containerCpu: 0.5
+                });
+                const transportTypes = ref([
+                    { value: 'http', label: 'HTTP', description: 'REST/HTTP-based server' },
+                    { value: 'sse', label: 'SSE', description: 'Server-Sent Events' },
+                    { value: 'stdio', label: 'Stdio', description: 'Local process' },
+                    { value: 'stdio-docker', label: 'Stdio-Docker', description: 'Docker container' }
+                ]);
 
                 const sessionId = 'session-' + Math.random().toString(36).substr(2, 9);
                 const apiKey = prompt("Enter API Key (or leave blank to use server env):", "") || "";
@@ -437,11 +698,175 @@
                     socket.value.emit('tool:approval', { callId, approved: false });
                 };
 
+                // Add MCP Modal Functions
+                const openAddMcpModal = () => {
+                    mcpForm.value = {
+                        name: '',
+                        transport: 'http',
+                        description: '',
+                        url: '',
+                        headers: [],
+                        command: '',
+                        args: '',
+                        cwd: '',
+                        containerImage: '',
+                        containerMemory: 512,
+                        containerCpu: 0.5
+                    };
+                    mcpFormError.value = '';
+                    addMcpModalOpen.value = true;
+                };
+
+                const closeAddMcpModal = () => {
+                    if (!mcpFormLoading.value) {
+                        addMcpModalOpen.value = false;
+                    }
+                };
+
+                const addHeader = () => {
+                    mcpForm.value.headers.push({ key: '', value: '' });
+                };
+
+                const removeHeader = (index) => {
+                    mcpForm.value.headers.splice(index, 1);
+                };
+
+                const validateMcpForm = () => {
+                    // Name validation
+                    if (!mcpForm.value.name || mcpForm.value.name.trim().length === 0) {
+                        return 'Name is required';
+                    }
+                    if (!/^[a-zA-Z0-9-_]+$/.test(mcpForm.value.name)) {
+                        return 'Name can only contain letters, numbers, hyphens, and underscores';
+                    }
+
+                    // Transport-specific validation
+                    if (mcpForm.value.transport === 'http' || mcpForm.value.transport === 'sse') {
+                        if (!mcpForm.value.url || mcpForm.value.url.trim().length === 0) {
+                            return 'URL is required for HTTP/SSE transport';
+                        }
+                        if (!mcpForm.value.url.startsWith('http://') && !mcpForm.value.url.startsWith('https://')) {
+                            return 'URL must start with http:// or https://';
+                        }
+                    } else if (mcpForm.value.transport === 'stdio') {
+                        if (!mcpForm.value.command || mcpForm.value.command.trim().length === 0) {
+                            return 'Command is required for stdio transport';
+                        }
+                    } else if (mcpForm.value.transport === 'stdio-docker') {
+                        if (!mcpForm.value.containerImage || mcpForm.value.containerImage.trim().length === 0) {
+                            return 'Container image is required for stdio-docker transport';
+                        }
+                    }
+
+                    return null;
+                };
+
+                const buildConfigPayload = () => {
+                    const baseConfig = {
+                        transport: mcpForm.value.transport,
+                        enabled: true,
+                        description: mcpForm.value.description || ''
+                    };
+
+                    if (mcpForm.value.transport === 'http' || mcpForm.value.transport === 'sse') {
+                        const config = {
+                            ...baseConfig,
+                            url: mcpForm.value.url
+                        };
+
+                        // Add headers if provided
+                        const headers = {};
+                        mcpForm.value.headers.forEach(h => {
+                            if (h.key && h.value) {
+                                headers[h.key] = h.value;
+                            }
+                        });
+                        if (Object.keys(headers).length > 0) {
+                            config.headers = headers;
+                        }
+
+                        return config;
+                    } else if (mcpForm.value.transport === 'stdio') {
+                        const config = {
+                            ...baseConfig,
+                            command: mcpForm.value.command
+                        };
+
+                        if (mcpForm.value.args && mcpForm.value.args.trim().length > 0) {
+                            config.args = mcpForm.value.args.trim().split(' ').filter(s => s.length > 0);
+                        }
+                        if (mcpForm.value.cwd && mcpForm.value.cwd.trim().length > 0) {
+                            config.cwd = mcpForm.value.cwd.trim();
+                        }
+
+                        return config;
+                    } else if (mcpForm.value.transport === 'stdio-docker') {
+                        const config = {
+                            ...baseConfig,
+                            containerImage: mcpForm.value.containerImage
+                        };
+
+                        if (mcpForm.value.containerMemory) {
+                            config.containerMemory = mcpForm.value.containerMemory;
+                        }
+                        if (mcpForm.value.containerCpu) {
+                            config.containerCpu = mcpForm.value.containerCpu;
+                        }
+
+                        return config;
+                    }
+
+                    return baseConfig;
+                };
+
+                const submitAddMcp = async () => {
+                    mcpFormError.value = '';
+
+                    // Validate form
+                    const error = validateMcpForm();
+                    if (error) {
+                        mcpFormError.value = error;
+                        return;
+                    }
+
+                    mcpFormLoading.value = true;
+
+                    try {
+                        const response = await fetch('/api/mcp/add', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                name: mcpForm.value.name,
+                                config: buildConfigPayload()
+                            })
+                        });
+
+                        const data = await response.json();
+
+                        if (!response.ok) {
+                            mcpFormError.value = data.error || 'Failed to add MCP server';
+                            return;
+                        }
+
+                        // Success - close modal and refresh list
+                        addMcpModalOpen.value = false;
+                        await loadMCPData();
+                    } catch (error) {
+                        mcpFormError.value = 'Network error: ' + error.message;
+                    } finally {
+                        mcpFormLoading.value = false;
+                    }
+                };
+
                 return {
                     isConnected, messages, inputMessage, chatContainer, sendMessage,
                     approveTool, rejectTool, isThinking, availableModels, selectedModel,
                     reconnect, modelsLoading, currentTab, healthData, mcpLoading,
-                    loadMCPData, refreshHealth, getStatusClass, getStatusIcon, formatTime
+                    loadMCPData, refreshHealth, getStatusClass, getStatusIcon, formatTime,
+                    addMcpModalOpen, mcpFormLoading, mcpFormError, mcpForm, transportTypes,
+                    openAddMcpModal, closeAddMcpModal, addHeader, removeHeader, submitAddMcp
                 };
             }
         }).mount('#app');

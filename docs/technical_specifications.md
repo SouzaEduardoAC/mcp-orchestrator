@@ -53,6 +53,12 @@ The system includes a production-ready MCP server (`mcp-server/index.js`):
 ## 6. API Endpoints
 - **GET `/api/models/available`**: Returns models accessible with current API key (dynamic testing, ~5-10s response time)
 - **GET `/api/models/check`**: Diagnostic endpoint showing detailed model availability status
+- **GET `/api/mcp/health`**: Returns health status for all configured MCPs with summary metrics
+- **POST `/api/mcp/add`**: Adds a new MCP server to the registry
+  - **Request Body**: `{ name: string, config: MCPServerConfig }`
+  - **Validation**: Name format, transport type, transport-specific required fields
+  - **Responses**: 201 (success), 400 (validation error), 409 (duplicate), 500 (server error)
+  - **Side Effects**: Updates `mcp-config.json`, emits `mcpAdded` event
 - **Static Files**: Served from `/public` directory (Vue.js SPA)
 
 ## 7. Complexity Concerns

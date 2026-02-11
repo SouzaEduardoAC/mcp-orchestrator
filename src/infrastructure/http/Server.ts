@@ -255,6 +255,69 @@ export class AppServer {
         res.status(500).json({ error: error.message });
       }
     });
+
+    // Add MCP server endpoint
+    this.app.post('/api/mcp/add', async (req, res) => {
+      try {
+        const { name, config } = req.body;
+
+        // Validate request body
+        if (!name || typeof name !== 'string') {
+          return res.status(400).json({ error: 'Name is required and must be a string' });
+        }
+
+        if (!config || typeof config !== 'object') {
+          return res.status(400).json({ error: 'Config is required and must be an object' });
+        }
+
+        // Validate name format
+        if (!/^[a-zA-Z0-9-_]+$/.test(name)) {
+          return res.status(400).json({ error: 'Name can only contain letters, numbers, hyphens, and underscores' });
+        }
+
+        // Validate transport type
+        const validTransports = ['http', 'sse', 'stdio', 'stdio-docker'];
+        if (!config.transport || !validTransports.includes(config.transport)) {
+          return res.status(400).json({ error: 'Valid transport type is required (http, sse, stdio, stdio-docker)' });
+        }
+
+        // Validate transport-specific required fields
+        if (config.transport === 'http' || config.transport === 'sse') {
+          if (!config.url || typeof config.url !== 'string') {
+            return res.status(400).json({ error: 'URL is required for HTTP/SSE transport' });
+          }
+          if (!config.url.startsWith('http://') && !config.url.startsWith('https://')) {
+            return res.status(400).json({ error: 'URL must start with http:// or https://' });
+          }
+        } else if (config.transport === 'stdio') {
+          if (!config.command || typeof config.command !== 'string') {
+            return res.status(400).json({ error: 'Command is required for stdio transport' });
+          }
+        } else if (config.transport === 'stdio-docker') {
+          if (!config.containerImage || typeof config.containerImage !== 'string') {
+            return res.status(400).json({ error: 'Container image is required for stdio-docker transport' });
+          }
+        }
+
+        // Import and initialize registry
+        const { ConfigStore } = await import('../../registry/ConfigStore');
+        const { MCPRegistry } = await import('../../registry/MCPRegistry');
+
+        const configStore = new ConfigStore();
+        const registry = new MCPRegistry(configStore);
+        await registry.initialize();
+
+        // Add the MCP (this will throw if duplicate)
+        await registry.addMCP(name, config);
+
+        res.status(201).json({ message: 'MCP server added successfully', name });
+      } catch (error: any) {
+        if (error.message.includes('already exists')) {
+          return res.status(409).json({ error: error.message });
+        }
+        res.status(500).json({ error: error.message });
+      }
+    });
   }
 
   public listen(port: number, callback?: () => void) {

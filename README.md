@@ -20,9 +20,10 @@ The **MCP Orchestrator** is a production-ready platform that enables LLMs (Claud
 
 ### Management Tools
 - **CLI Interface**: Complete `llm` command-line tool for MCP management
-- **Web Dashboard**: Visual monitoring interface with real-time updates
-- **REST API**: Programmatic access to health status and metrics
-- **Interactive Prompts**: User-friendly MCP configuration
+- **Web Dashboard**: Visual monitoring and management with real-time updates
+- **Web-Based MCP Creation**: Add new MCP servers via graphical form (no CLI needed)
+- **REST API**: Programmatic access to health status, metrics, and MCP creation
+- **Interactive Prompts**: User-friendly MCP configuration (CLI and Web)
 
 ### Multi-LLM Support
 - **Google Gemini**: 2.0 Flash, 1.5 Flash, 1.5 Pro
@@ -35,6 +36,10 @@ The **MCP Orchestrator** is a production-ready platform that enables LLMs (Claud
 - **Resource Limits**: Configurable memory (512MB) and CPU (0.5 cores)
 - **Human-in-the-Loop**: Tool approval workflow
 - **Session Management**: Secure, isolated workspaces per user
+
+## ✨ What's New
+
+**Web-Based MCP Creation** - You can now add MCP servers directly through the web interface without using the CLI! Simply click the "+ Add MCP" button in the MCP Management tab to create new servers with a user-friendly graphical form supporting all transport types (HTTP, SSE, Stdio, Stdio-Docker).
 
 ## 📚 Documentation
 
@@ -141,6 +146,7 @@ The web interface provides real-time monitoring and management:
 
 ### Features
 - **Summary Cards**: Total, healthy, and issues count
+- **Add MCP Server**: Create new MCP configurations via graphical form
 - **MCP List**: Real-time health status for each server
 - **Status Indicators**:
   - ✓ **Healthy** (green): MCP responding normally
@@ -151,11 +157,40 @@ The web interface provides real-time monitoring and management:
 - **Error Details**: Detailed error messages for failed MCPs
 - **Manual Refresh**: Update health status on demand
 
+### Adding MCPs via Web UI
+1. Open http://localhost:3000
+2. Click "🔧 MCP Management" tab
+3. Click the **"+ Add MCP"** button (green button)
+4. Fill in the form:
+   - **Name**: Unique identifier (letters, numbers, hyphens, underscores)
+   - **Transport Type**: Select HTTP, SSE, Stdio, or Stdio-Docker
+   - **Transport-Specific Fields**: URL, command, or container image based on transport
+   - **Description** (optional): Brief description of the MCP server
+   - **Additional Options**: Headers (HTTP/SSE), arguments (stdio), or resource limits (Docker)
+5. Click **"Add MCP Server"**
+6. New MCP appears automatically in the list
+
+### Transport Types in Web UI
+
+**HTTP/SSE**:
+- URL (required): `https://example.com/mcp`
+- Custom Headers (optional): Add key-value pairs
+
+**Stdio**:
+- Command (required): `node`
+- Arguments (optional): `server.js --port 3000`
+- Working Directory (optional): `/app`
+
+**Stdio-Docker**:
+- Container Image (required): `mcp-server:latest`
+- Memory Limit (optional): `512` MB
+- CPU Limit (optional): `0.5` cores
+
 ### Navigation
 1. Open http://localhost:3000
 2. Enter API key when prompted
 3. Click "🔧 MCP Management" tab
-4. View real-time health dashboard
+4. View real-time health dashboard or add new MCPs
 
 ## 🔌 API Endpoints
 
@@ -185,6 +220,31 @@ Returns:
   ]
 }
 ```
+
+### Add MCP Server
+```bash
+POST /api/mcp/add
+Content-Type: application/json
+```
+
+Request body:
+```json
+{
+  "name": "my-mcp",
+  "config": {
+    "transport": "http",
+    "url": "https://example.com/mcp",
+    "enabled": true,
+    "description": "My MCP server"
+  }
+}
+```
+
+Responses:
+- **201**: Success - `{"message": "MCP server added successfully", "name": "my-mcp"}`
+- **400**: Validation error - `{"error": "Name can only contain letters, numbers, hyphens, and underscores"}`
+- **409**: Duplicate - `{"error": "MCP server 'my-mcp' already exists"}`
+- **500**: Server error - `{"error": "Error message"}`
 
 ### Model Detection
 ```bash
