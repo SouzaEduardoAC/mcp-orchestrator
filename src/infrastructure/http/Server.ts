@@ -104,34 +104,100 @@ export class AppServer {
       }
     });
 
-    // Endpoint to get available models for current provider
-    this.app.get('/api/models/available', (req, res) => {
+    // Endpoint to get available models for current provider (dynamically checked)
+    this.app.get('/api/models/available', async (req, res) => {
       const provider = process.env.LLM_PROVIDER || 'gemini';
 
-      const modelsByProvider: Record<string, Array<{id: string, name: string}>> = {
-        claude: [
-          { id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet 4.5' },
-          { id: 'claude-opus-4-6', name: 'Claude Opus 4.6' },
-          { id: 'claude-haiku-4-5-20251001', name: 'Claude Haiku 4.5' },
-          { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku' }
-        ],
-        gemini: [
-          { id: 'gemini-2.0-flash-exp', name: 'Gemini 2.0 Flash (Experimental)' },
-          { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
-          { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' }
-        ],
-        openai: [
-          { id: 'gpt-4o', name: 'GPT-4o' },
-          { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
-          { id: 'gpt-4-turbo', name: 'GPT-4 Turbo' },
-          { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' }
-        ]
-      };
+      try {
+        const availableModels: Array<{id: string, name: string}> = [];
 
-      res.json({
-        provider,
-        models: modelsByProvider[provider] || []
-      });
+        if (provider === 'claude') {
+          const Anthropic = (await import('@anthropic-ai/sdk')).default;
+          const apiKey = process.env.ANTHROPIC_API_KEY;
+          if (!apiKey) {
+            return res.json({ error: 'ANTHROPIC_API_KEY not set', models: [] });
+          }
+          const client = new Anthropic({ apiKey });
+
+          // Define known Claude models with their display names
+          const knownModels = [
+            { id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet 4.5' },
+            { id: 'claude-opus-4-6', name: 'Claude Opus 4.6' },
+            { id: 'claude-haiku-4-5-20251001', name: 'Claude Haiku 4.5' },
+            { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet (Oct 2024)' },
+            { id: 'claude-3-5-sonnet-20240620', name: 'Claude 3.5 Sonnet (June 2024)' },
+            { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus' },
+            { id: 'claude-3-sonnet-20240229', name: 'Claude 3 Sonnet' },
+            { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku' }
+          ];
+
+          // Test each model
+          for (const model of knownModels) {
+            try {
+              await client.messages.create({
+                model: model.id,
+                max_tokens: 10,
+                messages: [{ role: 'user', content: 'test' }]
+              });
+              availableModels.push(model);
+            } catch (error: any) {
+              // Skip models that return 404 (not found)
+              if (error.status !== 404) {
+                console.error(`Error testing model ${model.id}:`, error.message);
+              }
+            }
+          }
+        } else if (provider === 'openai') {
+          const OpenAI = (await import('openai')).default;
+          const apiKey = process.env.OPENAI_API_KEY;
+          if (!apiKey) {
+            return res.json({ error: 'OPENAI_API_KEY not set', models: [] });
+          }
+          const client = new OpenAI({ apiKey });
+
+          // OpenAI has a proper list models endpoint
+          const modelsList = await client.models.list();
+          const chatModels = modelsList.data
+            .filter(m => m.id.startsWith('gpt-'))
+            .map(m => ({
+              id: m.id,
+              name: m.id.toUpperCase().replace(/-/g, ' ')
+            }));
+
+          availableModels.push(...chatModels);
+        } else if (provider === 'gemini') {
+          const { GoogleGenerativeAI } = await import('@google/generative-ai');
+          const apiKey = process.env.GEMINI_API_KEY;
+          if (!apiKey) {
+            return res.json({ error: 'GEMINI_API_KEY not set', models: [] });
+          }
+          const genAI = new GoogleGenerativeAI(apiKey);
+
+          // Gemini doesn't have a reliable list endpoint, so test known models
+          const knownModels = [
+            { id: 'gemini-2.0-flash-exp', name: 'Gemini 2.0 Flash (Experimental)' },
+            { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
+            { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' }
+          ];
+
+          for (const model of knownModels) {
+            try {
+              const geminiModel = genAI.getGenerativeModel({ model: model.id });
+              await geminiModel.generateContent('test');
+              availableModels.push(model);
+            } catch (error: any) {
+              console.error(`Error testing model ${model.id}:`, error.message);
+            }
+          }
+        }
+
+        res.json({
+          provider,
+          models: availableModels
+        });
+      } catch (error: any) {
+        res.status(500).json({ error: error.message, models: [] });
+      }
     });
   }
 

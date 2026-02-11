@@ -26,7 +26,15 @@
         <header class="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
             <div class="flex items-center space-x-3">
                 <h1 class="text-xl font-bold text-blue-400">{{ providerName }} MCP Orchestrator</h1>
-                <select v-model="selectedModel" @change="reconnect" class="text-sm bg-gray-800 border border-gray-700 text-gray-300 rounded px-2 py-1">
+                <div v-if="modelsLoading" class="flex items-center space-x-2 text-sm text-gray-400">
+                    <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Loading models...</span>
+                </div>
+                <select v-else v-model="selectedModel" @change="reconnect" :disabled="!availableModels.length" class="text-sm bg-gray-800 border border-gray-700 text-gray-300 rounded px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <option v-if="!availableModels.length" value="">No models available</option>
                     <option v-for="model in availableModels" :key="model.id" :value="model.id">
                         {{ model.name }}
                     </option>
@@ -39,7 +47,19 @@
 
         <!-- Chat Area -->
         <main class="flex-1 overflow-y-auto space-y-4 pr-2 mb-4" ref="chatContainer">
-            <div v-if="messages.length === 0" class="text-center text-gray-500 mt-20">
+            <div v-if="modelsLoading" class="text-center text-gray-400 mt-20">
+                <div class="flex flex-col items-center space-y-4">
+                    <svg class="animate-spin h-12 w-12 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <div>
+                        <p class="font-semibold text-lg">Preparing MCP Orchestrator...</p>
+                        <p class="text-sm mt-1">Checking available LLM models with your API key</p>
+                    </div>
+                </div>
+            </div>
+            <div v-else-if="messages.length === 0" class="text-center text-gray-500 mt-20">
                 <p>Start a conversation to spawn your secure workspace.</p>
             </div>
 
@@ -105,17 +125,17 @@
         <!-- Input Area -->
         <footer class="mt-auto pt-2">
             <form @submit.prevent="sendMessage" class="flex space-x-2">
-                <input 
-                    v-model="inputMessage" 
-                    type="text" 
-                    :placeholder="'Ask ' + providerName + ' to use a tool...'" 
-                    class="flex-1 bg-gray-800 border border-gray-700 text-white rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 transition"
-                    :disabled="!isConnected || isThinking"
+                <input
+                    v-model="inputMessage"
+                    type="text"
+                    :placeholder="modelsLoading ? 'Loading models...' : 'Ask ' + providerName + ' to use a tool...'"
+                    class="flex-1 bg-gray-800 border border-gray-700 text-white rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 transition disabled:opacity-50"
+                    :disabled="modelsLoading || !isConnected || isThinking"
                 >
-                <button 
-                    type="submit" 
+                <button
+                    type="submit"
                     class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
-                    :disabled="!inputMessage.trim() || !isConnected || isThinking"
+                    :disabled="modelsLoading || !inputMessage.trim() || !isConnected || isThinking"
                 >
                     Send
                 </button>
@@ -138,6 +158,7 @@
                 const providerName = ref('LLM');
                 const availableModels = ref([]);
                 const selectedModel = ref('');
+                const modelsLoading = ref(true);
 
                 // Generate a random session ID for demo
                 const sessionId = 'session-' + Math.random().toString(36).substr(2, 9);
@@ -238,6 +259,7 @@
 
                 onMounted(async () => {
                     // Fetch available models
+                    modelsLoading.value = true;
                     try {
                         const response = await fetch('/api/models/available');
                         const data = await response.json();
@@ -247,9 +269,14 @@
                         }
                     } catch (error) {
                         console.error('Failed to fetch models:', error);
+                    } finally {
+                        modelsLoading.value = false;
                     }
 
-                    connectSocket();
+                    // Only connect socket after models are loaded
+                    if (availableModels.value.length > 0) {
+                        connectSocket();
+                    }
                 });
 
                 const sendMessage = () => {
@@ -284,7 +311,8 @@
                     providerName,
                     availableModels,
                     selectedModel,
-                    reconnect
+                    reconnect,
+                    modelsLoading
                 };
             }
         }).mount('#app');
