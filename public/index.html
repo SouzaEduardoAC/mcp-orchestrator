@@ -17,118 +17,131 @@
             0%, 80%, 100% { transform: scale(0); }
             40% { transform: scale(1); }
         }
+        .pulse-dot {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-gray-100 h-screen flex flex-col font-sans">
-    <div id="app" class="flex-1 flex flex-col max-w-4xl mx-auto w-full h-full p-4">
-        
-        <!-- Header -->
-        <header class="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
-            <div class="flex items-center space-x-3">
-                <h1 class="text-xl font-bold text-blue-400">{{ providerName }} MCP Orchestrator</h1>
-                <div v-if="modelsLoading" class="flex items-center space-x-2 text-sm text-gray-400">
-                    <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <span>Loading models...</span>
+    <div id="app" class="flex-1 flex flex-col max-w-7xl mx-auto w-full h-full p-4">
+
+        <!-- Header with Tabs -->
+        <header class="mb-4 border-b border-gray-700 pb-2">
+            <div class="flex justify-between items-center mb-4">
+                <div class="flex items-center space-x-3">
+                    <h1 class="text-xl font-bold text-blue-400">MCP Orchestrator</h1>
+                    <span class="text-xs px-2 py-1 rounded" :class="isConnected ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'">
+                        {{ isConnected ? 'Connected' : 'Disconnected' }}
+                    </span>
                 </div>
-                <select v-else v-model="selectedModel" @change="reconnect" :disabled="!availableModels.length" class="text-sm bg-gray-800 border border-gray-700 text-gray-300 rounded px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed">
-                    <option v-if="!availableModels.length" value="">No models available</option>
-                    <option v-for="model in availableModels" :key="model.id" :value="model.id">
-                        {{ model.name }}
-                    </option>
-                </select>
+                <div v-if="currentTab === 'chat'" class="flex items-center space-x-3">
+                    <div v-if="modelsLoading" class="flex items-center space-x-2 text-sm text-gray-400">
+                        <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>Loading models...</span>
+                    </div>
+                    <select v-else v-model="selectedModel" @change="reconnect" :disabled="!availableModels.length" class="text-sm bg-gray-800 border border-gray-700 text-gray-300 rounded px-2 py-1">
+                        <option v-if="!availableModels.length" value="">No models available</option>
+                        <option v-for="model in availableModels" :key="model.id" :value="model.id">
+                            {{ model.name }}
+                        </option>
+                    </select>
+                </div>
             </div>
-            <div class="text-xs px-2 py-1 rounded" :class="isConnected ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'">
-                {{ isConnected ? 'Connected' : 'Disconnected' }}
+
+            <!-- Tabs -->
+            <div class="flex space-x-1">
+                <button @click="currentTab = 'chat'" :class="currentTab === 'chat' ? 'bg-gray-800 text-blue-400' : 'text-gray-400 hover:text-gray-300'" class="px-4 py-2 rounded-t-lg transition">
+                    💬 Chat
+                </button>
+                <button @click="currentTab = 'mcp'; loadMCPData()" :class="currentTab === 'mcp' ? 'bg-gray-800 text-blue-400' : 'text-gray-400 hover:text-gray-300'" class="px-4 py-2 rounded-t-lg transition">
+                    🔧 MCP Management
+                </button>
             </div>
         </header>
 
-        <!-- Chat Area -->
-        <main class="flex-1 overflow-y-auto space-y-4 pr-2 mb-4" ref="chatContainer">
-            <div v-if="modelsLoading" class="text-center text-gray-400 mt-20">
-                <div class="flex flex-col items-center space-y-4">
-                    <svg class="animate-spin h-12 w-12 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <div>
-                        <p class="font-semibold text-lg">Preparing MCP Orchestrator...</p>
-                        <p class="text-sm mt-1">Checking available LLM models with your API key</p>
+        <!-- Chat Tab -->
+        <main v-show="currentTab === 'chat'" class="flex-1 flex flex-col overflow-hidden">
+            <div class="flex-1 overflow-y-auto space-y-4 pr-2 mb-4" ref="chatContainer">
+                <div v-if="modelsLoading" class="text-center text-gray-400 mt-20">
+                    <div class="flex flex-col items-center space-y-4">
+                        <svg class="animate-spin h-12 w-12 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <div>
+                            <p class="font-semibold text-lg">Preparing MCP Orchestrator...</p>
+                            <p class="text-sm mt-1">Checking available LLM models</p>
+                        </div>
+                    </div>
+                </div>
+                <div v-else-if="messages.length === 0" class="text-center text-gray-500 mt-20">
+                    <p>Start a conversation to interact with your MCPs.</p>
+                </div>
+
+                <div v-for="(msg, index) in messages" :key="index" class="flex flex-col space-y-1">
+                    <div v-if="msg.role === 'user'" class="self-end max-w-[80%]">
+                        <div class="bg-blue-600 text-white px-4 py-2 rounded-2xl rounded-tr-none">
+                            {{ msg.content }}
+                        </div>
+                    </div>
+
+                    <div v-if="msg.role === 'agent'" class="self-start max-w-[80%]">
+                        <div class="bg-gray-700 text-gray-100 px-4 py-2 rounded-2xl rounded-tl-none whitespace-pre-wrap">
+                            {{ msg.content }}
+                        </div>
+                    </div>
+
+                    <div v-if="msg.role === 'thinking'" class="self-start text-gray-400 text-sm flex items-center space-x-1 pl-2">
+                        <span>Thinking</span>
+                        <div class="flex space-x-1">
+                            <div class="w-1.5 h-1.5 bg-gray-400 rounded-full typing-dot"></div>
+                            <div class="w-1.5 h-1.5 bg-gray-400 rounded-full typing-dot"></div>
+                            <div class="w-1.5 h-1.5 bg-gray-400 rounded-full typing-dot"></div>
+                        </div>
+                    </div>
+
+                    <div v-if="msg.role === 'approval'" class="self-start w-full max-w-md bg-gray-800 border border-yellow-700/50 rounded-lg p-4 my-2">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-yellow-500 font-semibold text-sm uppercase tracking-wider">Tool Approval Request</span>
+                            <span class="text-xs text-gray-500">{{ msg.data.callId }}</span>
+                        </div>
+                        <div class="mb-3">
+                            <div class="text-lg font-mono text-white mb-1">{{ msg.data.name }}</div>
+                            <pre class="bg-gray-900 p-2 rounded text-xs text-gray-300 overflow-x-auto">{{ JSON.stringify(msg.data.args, null, 2) }}</pre>
+                        </div>
+
+                        <div v-if="!msg.status" class="flex space-x-3">
+                            <button @click="approveTool(msg.data.callId, index)" class="flex-1 bg-green-700 hover:bg-green-600 text-white py-1.5 rounded transition text-sm font-medium">
+                                Approve
+                            </button>
+                            <button @click="rejectTool(msg.data.callId, index)" class="flex-1 bg-red-900/50 hover:bg-red-800 text-red-200 py-1.5 rounded transition text-sm font-medium border border-red-800">
+                                Reject
+                            </button>
+                        </div>
+                        <div v-else class="text-sm text-center py-1 font-medium" :class="msg.status === 'approved' ? 'text-green-400' : 'text-red-400'">
+                            {{ msg.status === 'approved' ? 'Approved & Executing...' : 'Rejected' }}
+                        </div>
+
+                        <div v-if="msg.output" class="mt-3 pt-2 border-t border-gray-700">
+                            <div class="text-xs text-gray-400 mb-1">Output:</div>
+                            <pre class="bg-black/50 p-2 rounded text-xs text-green-300 overflow-x-auto font-mono max-h-40 overflow-y-auto">{{ msg.output }}</pre>
+                        </div>
                     </div>
                 </div>
             </div>
-            <div v-else-if="messages.length === 0" class="text-center text-gray-500 mt-20">
-                <p>Start a conversation to spawn your secure workspace.</p>
-            </div>
 
-            <div v-for="(msg, index) in messages" :key="index" class="flex flex-col space-y-1">
-                
-                <!-- User Message -->
-                <div v-if="msg.role === 'user'" class="self-end max-w-[80%]">
-                    <div class="bg-blue-600 text-white px-4 py-2 rounded-2xl rounded-tr-none">
-                        {{ msg.content }}
-                    </div>
-                </div>
-
-                <!-- Agent Message -->
-                <div v-if="msg.role === 'agent'" class="self-start max-w-[80%]">
-                    <div class="bg-gray-700 text-gray-100 px-4 py-2 rounded-2xl rounded-tl-none whitespace-pre-wrap">
-                        {{ msg.content }}
-                    </div>
-                </div>
-
-                <!-- Thinking State -->
-                <div v-if="msg.role === 'thinking'" class="self-start text-gray-400 text-sm flex items-center space-x-1 pl-2">
-                    <span>Thinking</span>
-                    <div class="flex space-x-1">
-                        <div class="w-1.5 h-1.5 bg-gray-400 rounded-full typing-dot"></div>
-                        <div class="w-1.5 h-1.5 bg-gray-400 rounded-full typing-dot"></div>
-                        <div class="w-1.5 h-1.5 bg-gray-400 rounded-full typing-dot"></div>
-                    </div>
-                </div>
-
-                <!-- Approval Card -->
-                <div v-if="msg.role === 'approval'" class="self-start w-full max-w-md bg-gray-800 border border-yellow-700/50 rounded-lg p-4 my-2">
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="text-yellow-500 font-semibold text-sm uppercase tracking-wider">Tool Approval Request</span>
-                        <span class="text-xs text-gray-500">{{ msg.data.callId }}</span>
-                    </div>
-                    <div class="mb-3">
-                        <div class="text-lg font-mono text-white mb-1">{{ msg.data.name }}</div>
-                        <pre class="bg-gray-900 p-2 rounded text-xs text-gray-300 overflow-x-auto">{{ JSON.stringify(msg.data.args, null, 2) }}</pre>
-                    </div>
-                    
-                    <div v-if="!msg.status" class="flex space-x-3">
-                        <button @click="approveTool(msg.data.callId, index)" class="flex-1 bg-green-700 hover:bg-green-600 text-white py-1.5 rounded transition text-sm font-medium">
-                            Approve
-                        </button>
-                        <button @click="rejectTool(msg.data.callId, index)" class="flex-1 bg-red-900/50 hover:bg-red-800 text-red-200 py-1.5 rounded transition text-sm font-medium border border-red-800">
-                            Reject
-                        </button>
-                    </div>
-                    <div v-else class="text-sm text-center py-1 font-medium" :class="msg.status === 'approved' ? 'text-green-400' : 'text-red-400'">
-                        {{ msg.status === 'approved' ? 'Approved & Executing...' : 'Rejected' }}
-                    </div>
-
-                    <!-- Tool Output Stream -->
-                    <div v-if="msg.output" class="mt-3 pt-2 border-t border-gray-700">
-                        <div class="text-xs text-gray-400 mb-1">Output:</div>
-                        <pre class="bg-black/50 p-2 rounded text-xs text-green-300 overflow-x-auto font-mono max-h-40 overflow-y-auto">{{ msg.output }}</pre>
-                    </div>
-                </div>
-
-            </div>
-        </main>
-
-        <!-- Input Area -->
-        <footer class="mt-auto pt-2">
             <form @submit.prevent="sendMessage" class="flex space-x-2">
                 <input
                     v-model="inputMessage"
                     type="text"
-                    :placeholder="modelsLoading ? 'Loading models...' : 'Ask ' + providerName + ' to use a tool...'"
+                    placeholder="Ask the LLM to use a tool..."
                     class="flex-1 bg-gray-800 border border-gray-700 text-white rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 transition disabled:opacity-50"
                     :disabled="modelsLoading || !isConnected || isThinking"
                 >
@@ -140,7 +153,126 @@
                     Send
                 </button>
             </form>
-        </footer>
+        </main>
+
+        <!-- MCP Management Tab -->
+        <main v-show="currentTab === 'mcp'" class="flex-1 overflow-y-auto">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                <!-- Health Summary Cards -->
+                <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-gray-400 text-sm">Total MCPs</p>
+                            <p class="text-3xl font-bold">{{ healthData.summary?.total || 0 }}</p>
+                        </div>
+                        <div class="text-blue-400">
+                            <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-gray-800 rounded-lg p-4 border border-green-700/50">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-gray-400 text-sm">Healthy</p>
+                            <p class="text-3xl font-bold text-green-400">{{ healthData.summary?.healthy || 0 }}</p>
+                        </div>
+                        <div class="text-green-400">
+                            <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-gray-800 rounded-lg p-4 border border-red-700/50">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-gray-400 text-sm">Issues</p>
+                            <p class="text-3xl font-bold text-red-400">{{ (healthData.summary?.unhealthy || 0) + (healthData.summary?.reconnecting || 0) }}</p>
+                        </div>
+                        <div class="text-red-400">
+                            <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MCP List -->
+            <div class="bg-gray-800 rounded-lg border border-gray-700">
+                <div class="p-4 border-b border-gray-700 flex justify-between items-center">
+                    <h2 class="text-lg font-semibold">MCP Servers</h2>
+                    <button @click="refreshHealth" class="text-sm bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded transition">
+                        🔄 Refresh
+                    </button>
+                </div>
+
+                <div v-if="mcpLoading" class="p-8 text-center text-gray-400">
+                    <svg class="animate-spin h-8 w-8 mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <p>Loading MCP status...</p>
+                </div>
+
+                <div v-else-if="!healthData.mcps || healthData.mcps.length === 0" class="p-8 text-center text-gray-500">
+                    <p>No MCPs configured</p>
+                    <p class="text-sm mt-1">Use the CLI to add MCP servers: <code class="bg-gray-900 px-2 py-1 rounded">llm mcp add</code></p>
+                </div>
+
+                <div v-else class="divide-y divide-gray-700">
+                    <div v-for="mcp in healthData.mcps" :key="mcp.name" class="p-4 hover:bg-gray-750 transition">
+                        <div class="flex items-start justify-between">
+                            <div class="flex-1">
+                                <div class="flex items-center space-x-3 mb-2">
+                                    <h3 class="text-lg font-medium">{{ mcp.name }}</h3>
+                                    <span class="px-2 py-0.5 rounded text-xs font-medium" :class="getStatusClass(mcp.status)">
+                                        {{ getStatusIcon(mcp.status) }} {{ mcp.status }}
+                                    </span>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2 text-sm text-gray-400">
+                                    <div>Last Check: {{ formatTime(mcp.lastCheck) }}</div>
+                                    <div>Last Success: {{ formatTime(mcp.lastSuccess) }}</div>
+                                    <div v-if="mcp.consecutiveFailures > 0" class="col-span-2 text-yellow-400">
+                                        ⚠ Consecutive Failures: {{ mcp.consecutiveFailures }}
+                                    </div>
+                                    <div v-if="mcp.error" class="col-span-2 text-red-400 text-xs">
+                                        Error: {{ mcp.error }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CLI Instructions -->
+            <div class="mt-6 bg-gray-800 rounded-lg border border-gray-700 p-4">
+                <h3 class="font-semibold mb-3 text-blue-400">🚀 Quick Start</h3>
+                <div class="space-y-2 text-sm">
+                    <div class="bg-gray-900 p-2 rounded font-mono text-gray-300">
+                        <span class="text-gray-500">#</span> List all MCPs<br>
+                        <span class="text-green-400">llm mcp list</span>
+                    </div>
+                    <div class="bg-gray-900 p-2 rounded font-mono text-gray-300">
+                        <span class="text-gray-500">#</span> Add a new MCP<br>
+                        <span class="text-green-400">llm mcp add my-mcp --transport stdio-docker --image mcp-server:latest</span>
+                    </div>
+                    <div class="bg-gray-900 p-2 rounded font-mono text-gray-300">
+                        <span class="text-gray-500">#</span> Check health status<br>
+                        <span class="text-green-400">llm mcp health</span>
+                    </div>
+                    <div class="bg-gray-900 p-2 rounded font-mono text-gray-300">
+                        <span class="text-gray-500">#</span> Test connection<br>
+                        <span class="text-green-400">llm mcp test filesystem</span>
+                    </div>
+                </div>
+            </div>
+        </main>
 
     </div>
 
@@ -155,15 +287,17 @@
                 const inputMessage = ref('');
                 const chatContainer = ref(null);
                 const isThinking = ref(false);
-                const providerName = ref('LLM');
                 const availableModels = ref([]);
                 const selectedModel = ref('');
                 const modelsLoading = ref(true);
+                const currentTab = ref('chat');
 
-                // Generate a random session ID for demo
+                // MCP Management
+                const healthData = ref({ summary: {}, mcps: [] });
+                const mcpLoading = ref(false);
+
                 const sessionId = 'session-' + Math.random().toString(36).substr(2, 9);
-                // In real app, prompt for key or handle auth
-                const apiKey = prompt("Enter API Key (or leave blank to use server env if allowed):", "") || "";
+                const apiKey = prompt("Enter API Key (or leave blank to use server env):", "") || "";
 
                 const scrollToBottom = () => {
                     nextTick(() => {
@@ -179,71 +313,36 @@
                     }
 
                     socket.value = io({
-                        query: {
-                            sessionId,
-                            model: selectedModel.value || undefined
-                        },
+                        query: { sessionId, model: selectedModel.value || undefined },
                         auth: { token: apiKey }
                     });
 
-                    socket.value.on('connect', () => {
-                        isConnected.value = true;
-                        console.log('Connected');
-                    });
-
-                    socket.value.on('system:ready', (data) => {
-                        if (data.provider) {
-                            // Capitalize first letter
-                            providerName.value = data.provider.charAt(0).toUpperCase() + data.provider.slice(1);
-                        }
-                    });
-
-                    socket.value.on('disconnect', () => {
-                        isConnected.value = false;
-                        console.log('Disconnected');
-                    });
-
+                    socket.value.on('connect', () => { isConnected.value = true; });
+                    socket.value.on('disconnect', () => { isConnected.value = false; });
                     socket.value.on('agent:thinking', () => {
                         isThinking.value = true;
-                        // Add thinking bubble if not present
                         if (!messages.value.some(m => m.role === 'thinking')) {
                              messages.value.push({ role: 'thinking' });
                              scrollToBottom();
                         }
                     });
-
                     socket.value.on('agent:response', (text) => {
                         isThinking.value = false;
-                        // Remove thinking bubble
                         messages.value = messages.value.filter(m => m.role !== 'thinking');
-                        
                         messages.value.push({ role: 'agent', content: text });
                         scrollToBottom();
                     });
-
                     socket.value.on('tool:approval_required', (data) => {
-                        isThinking.value = false; // Pause thinking UI
+                        isThinking.value = false;
                         messages.value = messages.value.filter(m => m.role !== 'thinking');
-                        
-                        messages.value.push({ 
-                            role: 'approval', 
-                            data: data,
-                            status: null,
-                            output: null
-                        });
+                        messages.value.push({ role: 'approval', data: data, status: null, output: null });
                         scrollToBottom();
                     });
-
                     socket.value.on('tool:output', (output) => {
-                        // Find the last approval card
-                        // In a real app we'd match callId, but for now assuming sequential
                         const lastApproval = messages.value.slice().reverse().find(m => m.role === 'approval');
-                        if (lastApproval) {
-                            lastApproval.output = output;
-                        }
+                        if (lastApproval) lastApproval.output = output;
                         scrollToBottom();
                     });
-
                     socket.value.on('agent:error', (err) => {
                         isThinking.value = false;
                         messages.value = messages.value.filter(m => m.role !== 'thinking');
@@ -257,8 +356,49 @@
                     connectSocket();
                 };
 
+                const loadMCPData = async () => {
+                    mcpLoading.value = true;
+                    try {
+                        const response = await fetch('/api/mcp/health');
+                        const data = await response.json();
+                        healthData.value = data;
+                    } catch (error) {
+                        console.error('Failed to load MCP health:', error);
+                    } finally {
+                        mcpLoading.value = false;
+                    }
+                };
+
+                const refreshHealth = () => {
+                    loadMCPData();
+                };
+
+                const getStatusClass = (status) => {
+                    const classes = {
+                        'healthy': 'bg-green-900/50 text-green-300 border border-green-700',
+                        'unhealthy': 'bg-red-900/50 text-red-300 border border-red-700',
+                        'reconnecting': 'bg-yellow-900/50 text-yellow-300 border border-yellow-700',
+                        'disconnected': 'bg-gray-700 text-gray-400 border border-gray-600'
+                    };
+                    return classes[status] || 'bg-gray-700 text-gray-400';
+                };
+
+                const getStatusIcon = (status) => {
+                    const icons = {
+                        'healthy': '✓',
+                        'unhealthy': '⚠',
+                        'reconnecting': '↻',
+                        'disconnected': '✗'
+                    };
+                    return icons[status] || '?';
+                };
+
+                const formatTime = (timestamp) => {
+                    if (!timestamp) return 'Never';
+                    return new Date(timestamp).toLocaleString();
+                };
+
                 onMounted(async () => {
-                    // Fetch available models
                     modelsLoading.value = true;
                     try {
                         const response = await fetch('/api/models/available');
@@ -273,7 +413,6 @@
                         modelsLoading.value = false;
                     }
 
-                    // Only connect socket after models are loaded
                     if (availableModels.value.length > 0) {
                         connectSocket();
                     }
@@ -281,7 +420,6 @@
 
                 const sendMessage = () => {
                     if (!inputMessage.value.trim()) return;
-                    
                     messages.value.push({ role: 'user', content: inputMessage.value });
                     socket.value.emit('message', inputMessage.value);
                     inputMessage.value = '';
@@ -291,7 +429,7 @@
                 const approveTool = (callId, index) => {
                     messages.value[index].status = 'approved';
                     socket.value.emit('tool:approval', { callId, approved: true });
-                    isThinking.value = true; // Resume thinking
+                    isThinking.value = true;
                 };
 
                 const rejectTool = (callId, index) => {
@@ -300,19 +438,10 @@
                 };
 
                 return {
-                    isConnected,
-                    messages,
-                    inputMessage,
-                    chatContainer,
-                    sendMessage,
-                    approveTool,
-                    rejectTool,
-                    isThinking,
-                    providerName,
-                    availableModels,
-                    selectedModel,
-                    reconnect,
-                    modelsLoading
+                    isConnected, messages, inputMessage, chatContainer, sendMessage,
+                    approveTool, rejectTool, isThinking, availableModels, selectedModel,
+                    reconnect, modelsLoading, currentTab, healthData, mcpLoading,
+                    loadMCPData, refreshHealth, getStatusClass, getStatusIcon, formatTime
                 };
             }
         }).mount('#app');
