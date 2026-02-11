@@ -7,7 +7,11 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "jest",
-    "dev": "ts-node src/index.ts"
+    "dev": "ts-node src/index.ts",
+    "llm": "node dist/cli/index.js"
+  },
+  "bin": {
+    "llm": "./dist/cli/index.js"
   },
   "repository": {
     "type": "git",
@@ -31,13 +35,19 @@
     "openai": "^6.21.0",
     "redis": "^5.10.0",
     "socket.io": "^4.8.3",
-    "zod": "^4.3.6"
+    "zod": "^4.3.6",
+    "commander": "^12.0.0",
+    "inquirer": "^9.2.0",
+    "chalk": "^5.3.0",
+    "ora": "^8.0.0",
+    "cli-table3": "^0.6.5"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/dockerode": "^4.0.1",
     "@types/eslint": "^9.6.1",
     "@types/express": "^5.0.6",
+    "@types/inquirer": "^9.0.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^25.2.3",
     "@types/redis": "^4.0.10",

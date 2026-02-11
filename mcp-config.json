@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "transport": "stdio-docker",
+      "containerImage": "mcp-server:latest",
+      "enabled": true,
+      "description": "Local file system operations (read, write, list files, execute commands)"
+    }
+  },
+  "settings": {
+    "autoConnect": true,
+    "healthCheckInterval": 60000,
+    "toolNamespacing": "auto"
+  }
+}

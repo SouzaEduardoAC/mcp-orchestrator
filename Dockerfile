@@ -4,8 +4,8 @@ FROM node:22-alpine AS builder
 WORKDIR /usr/src/app
 
 # Install dependencies (including devDependencies for build)
-COPY package.json package-lock.json ./
-RUN npm ci
+COPY package.json ./
+RUN npm install
 
 # Copy source and build
 COPY tsconfig.json ./
@@ -18,8 +18,8 @@ FROM node:22-alpine
 WORKDIR /usr/src/app
 
 # Install only production dependencies
-COPY package.json package-lock.json ./
-RUN npm ci --only=production
+COPY package.json ./
+RUN npm install --omit=dev
 
 # Copy built artifacts from builder
 COPY --from=builder /usr/src/app/dist ./dist

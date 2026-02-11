@@ -10,13 +10,21 @@ export class DockerClient {
   /**
    * Spawns a new Docker container with the specified image and environment variables.
    * The container is configured with Tty: false, OpenStdin: true, and attached streams.
-   * 
+   *
    * @param image The Docker image to use.
    * @param env Key-value pairs of environment variables.
    * @param cmd Optional command to run in the container.
+   * @param memory Optional memory limit in MB (default: 512MB).
+   * @param cpu Optional CPU limit (default: 0.5 cores).
    * @returns The started Docker container instance.
    */
-  async spawnContainer(image: string, env: Record<string, string>, cmd?: string[]): Promise<Docker.Container> {
+  async spawnContainer(
+    image: string,
+    env: Record<string, string>,
+    cmd?: string[],
+    memory?: number,
+    cpu?: number
+  ): Promise<Docker.Container> {
     const envArray = Object.entries(env).map(([key, value]) => `${key}=${value}`);
 
     const container = await this.docker.createContainer({
@@ -29,9 +37,9 @@ export class DockerClient {
       AttachStdout: true,
       AttachStderr: true,
       HostConfig: {
-          Memory: 512 * 1024 * 1024, // 512MB
-          NanoCpus: 500000000,       // 0.5 CPU
-          NetworkMode: 'none'        // Disable networking
+          Memory: (memory || 512) * 1024 * 1024, // Default 512MB
+          NanoCpus: ((cpu || 0.5) * 1000000000), // Default 0.5 CPU
+          NetworkMode: 'none'                     // Disable networking
       }
     });
 
