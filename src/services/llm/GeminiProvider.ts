@@ -5,9 +5,9 @@ import { LLMProvider, LLMResult, ToolDefinition } from '../../interfaces/llm/LLM
 export class GeminiProvider implements LLMProvider {
   private model: GenerativeModel;
 
-  constructor(apiKey: string) {
+  constructor(apiKey: string, modelName?: string) {
     const genAI = new GoogleGenerativeAI(apiKey);
-    this.model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    this.model = genAI.getGenerativeModel({ model: modelName || 'gemini-2.0-flash-exp' });
   }
 
   async generateResponse(

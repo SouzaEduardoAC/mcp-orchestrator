@@ -14,10 +14,11 @@ export class AgentFactory {
     conversationRepo: ConversationRepository,
     dockerClient: DockerClient,
     events: AgentEvents,
-    clientToken?: string
+    clientToken?: string,
+    modelName?: string
   ): MCPAgent {
     const providerType = (process.env.LLM_PROVIDER || 'gemini').toLowerCase();
-    
+
     let provider: LLMProvider;
 
     switch (providerType) {
@@ -25,14 +26,14 @@ export class AgentFactory {
       case 'anthropic':
         const claudeKey = clientToken || process.env.ANTHROPIC_API_KEY;
         if (!claudeKey) throw new Error('ANTHROPIC_API_KEY is required for Claude provider');
-        provider = new ClaudeProvider(claudeKey);
+        provider = new ClaudeProvider(claudeKey, modelName);
         break;
-      
+
       case 'openai':
       case 'chatgpt':
         const openaiKey = clientToken || process.env.OPENAI_API_KEY;
         if (!openaiKey) throw new Error('OPENAI_API_KEY is required for OpenAI provider');
-        provider = new OpenAIProvider(openaiKey);
+        provider = new OpenAIProvider(openaiKey, modelName);
         break;
 
       case 'gemini':
@@ -40,7 +41,7 @@ export class AgentFactory {
       default:
         const geminiKey = clientToken || process.env.GEMINI_API_KEY;
         if (!geminiKey) throw new Error('GEMINI_API_KEY is required for Gemini provider');
-        provider = new GeminiProvider(geminiKey);
+        provider = new GeminiProvider(geminiKey, modelName);
         break;
     }
 

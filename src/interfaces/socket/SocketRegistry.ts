@@ -19,6 +19,7 @@ export class SocketRegistry {
     this.io.on('connection', async (socket: Socket) => {
       const sessionId = socket.handshake.query.sessionId as string;
       const clientToken = socket.handshake.auth.token;
+      const modelName = socket.handshake.query.model as string | undefined;
 
       if (!sessionId) {
         socket.emit('error', 'Missing sessionId in query params');
@@ -26,7 +27,7 @@ export class SocketRegistry {
         return;
       }
 
-      console.log(`[Socket] New connection: ${sessionId}`);
+      console.log(`[Socket] New connection: ${sessionId} with model: ${modelName || 'default'}`);
 
       try {
         // 1. Acquire Session (Container)
@@ -46,7 +47,8 @@ export class SocketRegistry {
             onToolOutput: (output) => socket.emit('tool:output', output),
             onError: (err) => socket.emit('agent:error', err)
           },
-          clientToken
+          clientToken,
+          modelName
         );
 
         await agent.initialize();
@@ -74,10 +76,11 @@ export class SocketRegistry {
            // The Janitor will clean it up if they don't come back.
         });
 
-        socket.emit('system:ready', { 
-            sessionId, 
+        socket.emit('system:ready', {
+            sessionId,
             containerId: sessionData.containerId,
-            provider: AgentFactory.getProviderType()
+            provider: AgentFactory.getProviderType(),
+            model: modelName
         });
 
       } catch (err: any) {

@@ -29,6 +29,9 @@ COPY public ./public
 # We ensure the directory is owned by node
 RUN chown -R node:node /usr/src/app
 
+# Add node user to docker group (GID 990) to access docker socket
+RUN addgroup -g 990 docker && addgroup node docker
+
 USER node
 
 EXPOSE 3000

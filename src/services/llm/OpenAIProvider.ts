@@ -4,9 +4,11 @@ import { LLMProvider, LLMResult, ToolDefinition } from '../../interfaces/llm/LLM
 
 export class OpenAIProvider implements LLMProvider {
   private client: OpenAI;
+  private model: string;
 
-  constructor(apiKey: string) {
+  constructor(apiKey: string, model?: string) {
     this.client = new OpenAI({ apiKey });
+    this.model = model || 'gpt-4o';
   }
 
   async generateResponse(
@@ -33,7 +35,7 @@ export class OpenAIProvider implements LLMProvider {
     messages.push({ role: 'user', content: userPrompt });
 
     const response = await this.client.chat.completions.create({
-      model: 'gpt-4o',
+      model: this.model,
       messages,
       tools: openaiTools.length > 0 ? openaiTools : undefined
     });

@@ -24,7 +24,14 @@
         
         <!-- Header -->
         <header class="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
-            <h1 class="text-xl font-bold text-blue-400">{{ providerName }} MCP Orchestrator</h1>
+            <div class="flex items-center space-x-3">
+                <h1 class="text-xl font-bold text-blue-400">{{ providerName }} MCP Orchestrator</h1>
+                <select v-model="selectedModel" @change="reconnect" class="text-sm bg-gray-800 border border-gray-700 text-gray-300 rounded px-2 py-1">
+                    <option v-for="model in availableModels" :key="model.id" :value="model.id">
+                        {{ model.name }}
+                    </option>
+                </select>
+            </div>
             <div class="text-xs px-2 py-1 rounded" :class="isConnected ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'">
                 {{ isConnected ? 'Connected' : 'Disconnected' }}
             </div>
@@ -129,6 +136,8 @@
                 const chatContainer = ref(null);
                 const isThinking = ref(false);
                 const providerName = ref('LLM');
+                const availableModels = ref([]);
+                const selectedModel = ref('');
 
                 // Generate a random session ID for demo
                 const sessionId = 'session-' + Math.random().toString(36).substr(2, 9);
@@ -143,9 +152,16 @@
                     });
                 };
 
-                onMounted(() => {
+                const connectSocket = () => {
+                    if (socket.value) {
+                        socket.value.disconnect();
+                    }
+
                     socket.value = io({
-                        query: { sessionId },
+                        query: {
+                            sessionId,
+                            model: selectedModel.value || undefined
+                        },
                         auth: { token: apiKey }
                     });
 
@@ -213,6 +229,27 @@
                         messages.value.push({ role: 'agent', content: `❌ Error: ${err}` });
                         scrollToBottom();
                     });
+                };
+
+                const reconnect = () => {
+                    messages.value = [];
+                    connectSocket();
+                };
+
+                onMounted(async () => {
+                    // Fetch available models
+                    try {
+                        const response = await fetch('/api/models/available');
+                        const data = await response.json();
+                        availableModels.value = data.models || [];
+                        if (availableModels.value.length > 0) {
+                            selectedModel.value = availableModels.value[0].id;
+                        }
+                    } catch (error) {
+                        console.error('Failed to fetch models:', error);
+                    }
+
+                    connectSocket();
                 });
 
                 const sendMessage = () => {
@@ -244,7 +281,10 @@
                     approveTool,
                     rejectTool,
                     isThinking,
-                    providerName
+                    providerName,
+                    availableModels,
+                    selectedModel,
+                    reconnect
                 };
             }
         }).mount('#app');

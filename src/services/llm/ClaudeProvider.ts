@@ -4,9 +4,11 @@ import { LLMProvider, LLMResult, ToolDefinition } from '../../interfaces/llm/LLM
 
 export class ClaudeProvider implements LLMProvider {
   private client: Anthropic;
+  private model: string;
 
-  constructor(apiKey: string) {
+  constructor(apiKey: string, model?: string) {
     this.client = new Anthropic({ apiKey });
+    this.model = model || 'claude-sonnet-4-5-20250929';
   }
 
   async generateResponse(
@@ -30,7 +32,7 @@ export class ClaudeProvider implements LLMProvider {
     messages.push({ role: 'user', content: userPrompt });
 
     const response = await this.client.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: this.model,
       max_tokens: 1024,
       messages,
       tools: claudeTools.length > 0 ? claudeTools : undefined
