@@ -1,5 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { ConfigStore } from '../registry/ConfigStore';
 import { MCPRegistry } from '../registry/MCPRegistry';
 import { MCPServerConfig } from '../registry/types';
@@ -72,7 +73,12 @@ export class MCPConnectionManager {
       transport = new DockerContainerTransport(container);
       await transport.start();
     } else if (config.transport === 'http' || config.transport === 'sse') {
-      throw new Error(`Transport type ${config.transport} not yet implemented for MCPConnectionManager`);
+      if (!config.url) {
+        throw new Error(`MCP ${name}: url required for ${config.transport} transport`);
+      }
+      // Use SSE transport for both HTTP and SSE
+      // Note: client.connect() will call transport.start() automatically
+      transport = new SSEClientTransport(new URL(config.url));
     } else if (config.transport === 'stdio') {
       throw new Error(`stdio transport requires process spawning - not yet implemented`);
     } else {

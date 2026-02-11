@@ -26,6 +26,8 @@ services:
     volumes:
       # Critical: Allows the Orchestrator to spawn sibling containers
       - /var/run/docker.sock:/var/run/docker.sock
+      # Persist MCP configuration across restarts
+      - mcp-config:/usr/src/app
     depends_on:
       mcp-placeholder:
         condition: service_started
@@ -35,3 +37,6 @@ services:
 networks:
   app_network:
     external: true
+
+volumes:
+  mcp-config:
