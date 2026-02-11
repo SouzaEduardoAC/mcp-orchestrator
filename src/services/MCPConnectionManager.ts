@@ -211,6 +211,78 @@ export class MCPConnectionManager {
   }
 
   /**
+   * Check health of a specific MCP
+   */
+  async checkHealth(mcpName: string): Promise<boolean> {
+    const connection = this.connections.get(mcpName);
+    if (!connection) {
+      return false;
+    }
+
+    try {
+      // Try to list tools as a health check
+      const toolsResult = await Promise.race([
+        connection.client.listTools(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Health check timeout')), 5000)
+        )
+      ]);
+
+      return toolsResult !== undefined;
+    } catch (error) {
+      console.error(`[MCPConnectionManager] Health check failed for ${mcpName}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Reconnect to a specific MCP
+   */
+  async reconnect(mcpName: string): Promise<void> {
+    // Get the original config
+    const enabledMCPs = await this.registry.getEnabledMCPs();
+    const config = enabledMCPs[mcpName];
+
+    if (!config) {
+      throw new Error(`MCP ${mcpName} not found in registry or is disabled`);
+    }
+
+    // Disconnect existing connection
+    const existingConnection = this.connections.get(mcpName);
+    if (existingConnection) {
+      try {
+        await existingConnection.transport.close();
+      } catch (error) {
+        console.warn(`[MCPConnectionManager] Error closing existing connection for ${mcpName}:`, error);
+      }
+      this.connections.delete(mcpName);
+    }
+
+    // Reconnect
+    await this.connectToMCP(mcpName, config);
+    console.log(`[MCPConnectionManager] Reconnected to MCP: ${mcpName}`);
+  }
+
+  /**
+   * Disconnect from a specific MCP
+   */
+  async disconnect(mcpName: string): Promise<void> {
+    const connection = this.connections.get(mcpName);
+    if (!connection) {
+      return;
+    }
+
+    try {
+      await connection.transport.close();
+      this.connections.delete(mcpName);
+      console.log(`[MCPConnectionManager] Disconnected from MCP: ${mcpName}`);
+    } catch (error) {
+      console.error(`[MCPConnectionManager] Error disconnecting from ${mcpName}:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Cleanup all connections
    */
   async cleanup(): Promise<void> {
@@ -230,5 +302,12 @@ export class MCPConnectionManager {
    */
   getConnectedMCPs(): string[] {
     return Array.from(this.connections.keys());
+  }
+
+  /**
+   * Get connection info for a specific MCP
+   */
+  getConnection(mcpName: string): MCPConnection | undefined {
+    return this.connections.get(mcpName);
   }
 }

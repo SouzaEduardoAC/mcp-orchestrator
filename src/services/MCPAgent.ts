@@ -3,6 +3,7 @@ import { SessionData } from '../domain/session/SessionRepository';
 import { DockerClient } from '../infrastructure/docker/DockerClient';
 import { LLMProvider, ToolDefinition } from '../interfaces/llm/LLMProvider';
 import { MCPConnectionManager } from './MCPConnectionManager';
+import { MCPHealthMonitor } from './MCPHealthMonitor';
 
 export interface AgentEvents {
   onThinking: () => void;
@@ -14,6 +15,7 @@ export interface AgentEvents {
 
 export class MCPAgent {
   private connectionManager: MCPConnectionManager;
+  private healthMonitor: MCPHealthMonitor;
 
   // Pending tool call state
   private pendingCall: { id: string; name: string; args: any } | null = null;
@@ -27,6 +29,32 @@ export class MCPAgent {
     private events: AgentEvents
   ) {
     this.connectionManager = new MCPConnectionManager(dockerClient);
+    this.healthMonitor = new MCPHealthMonitor(this.connectionManager, 60000); // 60s interval
+
+    // Listen to health events
+    this.setupHealthMonitoring();
+  }
+
+  private setupHealthMonitoring(): void {
+    this.healthMonitor.on('mcp-unhealthy', (name, health) => {
+      console.warn(`[Agent ${this.sessionId}] MCP '${name}' became unhealthy:`, health.error);
+    });
+
+    this.healthMonitor.on('mcp-healthy', (name) => {
+      console.log(`[Agent ${this.sessionId}] MCP '${name}' recovered`);
+    });
+
+    this.healthMonitor.on('reconnect-attempt', (name, attempt) => {
+      console.log(`[Agent ${this.sessionId}] Reconnecting to '${name}' (attempt ${attempt})`);
+    });
+
+    this.healthMonitor.on('reconnect-success', (name) => {
+      console.log(`[Agent ${this.sessionId}] Successfully reconnected to '${name}'`);
+    });
+
+    this.healthMonitor.on('reconnect-failed', (name, error) => {
+      console.error(`[Agent ${this.sessionId}] Failed to reconnect to '${name}': ${error}`);
+    });
   }
 
   async initialize() {
@@ -34,6 +62,9 @@ export class MCPAgent {
     await this.connectionManager.initialize();
     const connectedMCPs = this.connectionManager.getConnectedMCPs();
     console.log(`[Agent ${this.sessionId}] Connected to MCPs:`, connectedMCPs);
+
+    // Start health monitoring
+    this.healthMonitor.start();
   }
 
   async generateResponse(userPrompt: string) {
@@ -120,7 +151,22 @@ export class MCPAgent {
   
   async cleanup() {
       try {
+          this.healthMonitor.stop();
           await this.connectionManager.cleanup();
       } catch (e) { console.error("Error cleaning up MCP connections", e); }
+  }
+
+  /**
+   * Get health status for all MCPs
+   */
+  getHealthStatus() {
+    return this.healthMonitor.getAllHealth();
+  }
+
+  /**
+   * Get health summary
+   */
+  getHealthSummary() {
+    return this.healthMonitor.getHealthSummary();
   }
 }

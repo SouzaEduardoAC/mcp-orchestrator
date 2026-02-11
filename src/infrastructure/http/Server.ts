@@ -199,6 +199,62 @@ export class AppServer {
         res.status(500).json({ error: error.message, models: [] });
       }
     });
+
+    // MCP health status endpoint
+    this.app.get('/api/mcp/health', async (req, res) => {
+      try {
+        const { MCPConnectionManager } = await import('../../services/MCPConnectionManager');
+        const { MCPHealthMonitor } = await import('../../services/MCPHealthMonitor');
+        const { ConfigStore } = await import('../../registry/ConfigStore');
+        const { MCPRegistry } = await import('../../registry/MCPRegistry');
+        const { DockerClient } = await import('../docker/DockerClient');
+
+        const configStore = new ConfigStore();
+        const registry = new MCPRegistry(configStore);
+        await registry.initialize();
+
+        const dockerClient = new DockerClient();
+        const connectionManager = new MCPConnectionManager(dockerClient);
+        await connectionManager.initialize();
+
+        const healthMonitor = new MCPHealthMonitor(connectionManager, 60000);
+
+        const connectedMCPs = connectionManager.getConnectedMCPs();
+
+        // Run health checks
+        const healthChecks = await Promise.allSettled(
+          connectedMCPs.map(name => healthMonitor.triggerHealthCheck(name))
+        );
+
+        const healthResults = connectedMCPs.map((name, i) => {
+          const check = healthChecks[i];
+          if (check.status === 'fulfilled' && check.value) {
+            return check.value;
+          }
+          return {
+            name,
+            status: 'unknown',
+            lastCheck: Date.now(),
+            lastSuccess: 0,
+            consecutiveFailures: 0,
+            error: 'Health check failed'
+          };
+        });
+
+        const summary = healthMonitor.getHealthSummary();
+
+        // Cleanup
+        healthMonitor.stop();
+        await connectionManager.cleanup();
+
+        res.json({
+          summary,
+          mcps: healthResults
+        });
+      } catch (error: any) {
+        res.status(500).json({ error: error.message });
+      }
+    });
   }
 
   public listen(port: number, callback?: () => void) {

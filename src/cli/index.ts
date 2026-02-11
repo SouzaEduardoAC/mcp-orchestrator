@@ -8,6 +8,7 @@ import { enableCommand } from './commands/mcp/enable';
 import { disableCommand } from './commands/mcp/disable';
 import { testCommand } from './commands/mcp/test';
 import { infoCommand } from './commands/mcp/info';
+import { healthCommand } from './commands/mcp/health';
 
 const program = new Command();
 
@@ -65,6 +66,11 @@ mcp
   .command('info <name>')
   .description('Show detailed information about an MCP server')
   .action(infoCommand);
+
+mcp
+  .command('health')
+  .description('Check health status of all MCP servers')
+  .action(healthCommand);
 
 program.parse();
 
