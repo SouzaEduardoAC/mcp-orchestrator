@@ -78,7 +78,15 @@ export class MCPConnectionManager {
       }
       // Use SSE transport for both HTTP and SSE
       // Note: client.connect() will call transport.start() automatically
-      transport = new SSEClientTransport(new URL(config.url));
+      // Wrap fetch with custom headers if provided
+      const customFetch = config.headers
+        ? (url: RequestInfo | URL, init?: RequestInit) => {
+            const headers = { ...init?.headers, ...config.headers };
+            return fetch(url, { ...init, headers });
+          }
+        : undefined;
+
+      transport = new SSEClientTransport(new URL(config.url), customFetch ? { fetch: customFetch } : undefined);
     } else if (config.transport === 'stdio') {
       throw new Error(`stdio transport requires process spawning - not yet implemented`);
     } else {
