@@ -250,6 +250,12 @@
                                     </div>
                                 </div>
                             </div>
+                            <div class="ml-4">
+                                <button @click="confirmRemoveMcp(mcp.name)" class="px-3 py-1.5 bg-red-600 hover:bg-red-500 rounded text-sm transition disabled:opacity-50" :disabled="mcpRemoveLoading === mcp.name">
+                                    <span v-if="mcpRemoveLoading === mcp.name">Removing...</span>
+                                    <span v-else>🗑️ Remove</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -487,6 +493,41 @@
                 </div>
             </div>
 
+            <!-- Remove MCP Confirmation Modal -->
+            <div v-if="removeMcpModalOpen" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50" @click.self="closeRemoveMcpModal">
+                <div class="bg-gray-800 rounded-lg border border-gray-700 w-full max-w-md p-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold text-red-400">Remove MCP Server</h2>
+                        <button @click="closeRemoveMcpModal" :disabled="mcpRemoveLoading" class="text-gray-400 hover:text-white text-2xl disabled:opacity-50">
+                            ×
+                        </button>
+                    </div>
+
+                    <div class="mb-6">
+                        <p class="text-gray-300 mb-2">Are you sure you want to remove <strong class="text-white">{{ mcpToRemove }}</strong>?</p>
+                        <p class="text-sm text-gray-400">This action cannot be undone. The MCP configuration will be permanently deleted.</p>
+                    </div>
+
+                    <!-- Error Display -->
+                    <div v-if="mcpRemoveError" class="mb-4 p-3 bg-red-900/50 border border-red-700 rounded text-red-200 text-sm">
+                        {{ mcpRemoveError }}
+                    </div>
+
+                    <div class="flex space-x-3">
+                        <button @click="closeRemoveMcpModal" :disabled="mcpRemoveLoading" class="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded transition disabled:opacity-50">
+                            Cancel
+                        </button>
+                        <button @click="submitRemoveMcp" :disabled="mcpRemoveLoading" class="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 rounded transition disabled:opacity-50 flex items-center justify-center">
+                            <svg v-if="mcpRemoveLoading" class="animate-spin h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            {{ mcpRemoveLoading ? 'Removing...' : 'Remove' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
         </main>
 
     </div>
@@ -515,6 +556,13 @@
                 const addMcpModalOpen = ref(false);
                 const mcpFormLoading = ref(false);
                 const mcpFormError = ref('');
+
+                // Remove MCP Modal
+                const removeMcpModalOpen = ref(false);
+                const mcpRemoveLoading = ref(null);
+                const mcpRemoveError = ref('');
+                const mcpToRemove = ref('');
+
                 const mcpForm = ref({
                     name: '',
                     transport: 'http',
@@ -838,13 +886,60 @@
                     }
                 };
 
+                // Remove MCP functions
+                const confirmRemoveMcp = (name) => {
+                    mcpToRemove.value = name;
+                    mcpRemoveError.value = '';
+                    removeMcpModalOpen.value = true;
+                };
+
+                const closeRemoveMcpModal = () => {
+                    if (!mcpRemoveLoading.value) {
+                        removeMcpModalOpen.value = false;
+                        mcpToRemove.value = '';
+                        mcpRemoveError.value = '';
+                    }
+                };
+
+                const submitRemoveMcp = async () => {
+                    mcpRemoveError.value = '';
+                    mcpRemoveLoading.value = mcpToRemove.value;
+
+                    try {
+                        const response = await fetch(`/api/mcp/${encodeURIComponent(mcpToRemove.value)}`, {
+                            method: 'DELETE',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            }
+                        });
+
+                        const data = await response.json();
+
+                        if (!response.ok) {
+                            mcpRemoveError.value = data.error || 'Failed to remove MCP server';
+                            return;
+                        }
+
+                        // Success - close modal and refresh list
+                        removeMcpModalOpen.value = false;
+                        mcpToRemove.value = '';
+                        await loadMCPData();
+                    } catch (error) {
+                        mcpRemoveError.value = 'Network error: ' + error.message;
+                    } finally {
+                        mcpRemoveLoading.value = null;
+                    }
+                };
+
                 return {
                     isConnected, messages, inputMessage, chatContainer, sendMessage,
                     approveTool, rejectTool, isThinking, availableModels, selectedModel,
                     reconnect, modelsLoading, currentTab, healthData, mcpLoading,
                     loadMCPData, refreshHealth, getStatusClass, getStatusIcon, formatTime,
                     addMcpModalOpen, mcpFormLoading, mcpFormError, mcpForm, transportTypes,
-                    openAddMcpModal, closeAddMcpModal, addHeader, removeHeader, submitAddMcp
+                    openAddMcpModal, closeAddMcpModal, addHeader, removeHeader, submitAddMcp,
+                    removeMcpModalOpen, mcpRemoveLoading, mcpRemoveError, mcpToRemove,
+                    confirmRemoveMcp, closeRemoveMcpModal, submitRemoveMcp
                 };
             }
         }).mount('#app');
