@@ -2,10 +2,10 @@
 
 ## Metadata
 - **Last Updated**: 2026-02-11
-- **Version**: 1.0.0 (Phases 1-5 Complete)
+- **Version**: 1.0.0 (Phases 1-5 Complete + HTTP/SSE Support)
 - **Architectural Style**: Multi-MCP Orchestration with Health Monitoring
 - **Primary Tech Stack**: Node.js, TypeScript, Docker, Redis, Socket.io, MCP SDK, Vue.js
-- **Key Features**: Multi-MCP support, health monitoring, auto-reconnection, CLI management, web dashboard
+- **Key Features**: Multi-MCP support, health monitoring, auto-reconnection, CLI management, web dashboard, HTTP/SSE transports, persistent configuration
 
 ## System Evolution
 
@@ -17,13 +17,14 @@
 
 ### Current Design (Post-Phase 5)
 - **Multiple MCPs per session** (unlimited)
-- **Registry-based configuration** (mcp-config.json)
+- **Registry-based configuration** (mcp-config.json with Docker volume persistence)
 - **Automatic health monitoring** (60s intervals)
 - **Auto-reconnection** with circuit breaker
 - **CLI management** (`llm` command with 8 subcommands)
-- **Web dashboard** (real-time monitoring)
+- **Web dashboard** (real-time monitoring and MCP creation)
 - **Tool aggregation** from all MCPs
 - **Smart namespacing** (auto/prefix/none)
+- **Multi-transport support** (stdio-docker, HTTP, SSE, stdio)
 
 ## Dependency Map
 
@@ -206,13 +207,15 @@ Spawns Docker container with stdio communication:
 HTTP REST or Server-Sent Events:
 ```typescript
 {
-  transport: "http",
-  url: "http://mcp-server:8080",
+  transport: "sse",
+  url: "http://mcp-server:8080/sse",  // Note: SSE servers often require /sse path
   headers: { Authorization: "Bearer ${API_KEY}" },
   healthCheckEndpoint: "/health",
   timeout: 30000
 }
 ```
+
+**Important**: SSE-based MCP servers typically require a specific endpoint path (e.g., `/sse`). Verify the correct URL with your MCP server documentation.
 
 ### stdio
 Local process via stdin/stdout:

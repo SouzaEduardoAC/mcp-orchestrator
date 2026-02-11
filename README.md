@@ -41,6 +41,10 @@ The **MCP Orchestrator** is a production-ready platform that enables LLMs (Claud
 
 **Web-Based MCP Creation** - You can now add MCP servers directly through the web interface without using the CLI! Simply click the "+ Add MCP" button in the MCP Management tab to create new servers with a user-friendly graphical form supporting all transport types (HTTP, SSE, Stdio, Stdio-Docker).
 
+**HTTP/SSE Transport Support** - Full support for HTTP and SSE-based MCP servers. Connect to remote MCP servers using Server-Sent Events or REST APIs.
+
+**Persistent Configuration** - MCP configurations are now persisted via Docker volumes, surviving container restarts and rebuilds.
+
 ## 📚 Documentation
 
 *   [**Business Flow**](./docs/business_flow.md): User journey and high-level logic
@@ -302,12 +306,14 @@ MCPs are configured in `mcp-config.json`:
 **http/sse**:
 ```json
 {
-  "transport": "http",
-  "url": "http://mcp-server:8080",
+  "transport": "sse",
+  "url": "http://mcp-server:8080/sse",
   "headers": { "Authorization": "Bearer ${API_KEY}" },
   "timeout": 30000
 }
 ```
+
+**Note**: SSE-based MCP servers often require a specific endpoint path (e.g., `/sse`). Check your MCP server's documentation for the correct URL.
 
 **stdio**:
 ```json
@@ -478,6 +484,13 @@ docker logs mcp-orchestrator-app-1
 2. Verify MCP is healthy: `llm mcp health`
 3. Review error message in logs
 4. Check container resource limits
+
+### MCP Tools Not Appearing in Chat
+If you add a new MCP but its tools don't appear in your chat session:
+1. **Refresh the browser page** - Chat sessions load MCPs on initialization
+2. Check the MCP is healthy in the 🔧 MCP Management tab
+3. Look for connection errors: `docker logs mcp-orchestrator-app-1 | grep -i "failed"`
+4. For SSE/HTTP MCPs, verify the endpoint URL includes the correct path (e.g., `/sse`)
 
 ## 🔗 Related Projects
 

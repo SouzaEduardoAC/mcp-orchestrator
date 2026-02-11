@@ -17,6 +17,8 @@
     - **ConversationRepository**: Stores message history as a sliding window (max 50 messages) (`mcp:conversation:{id}`).
 - **Docker (Compute)**:
     - Ephemeral containers run MCP servers. The state within the container is isolated per session.
+- **Docker Volumes**:
+    - **mcp-config volume**: Persists MCP configuration (`mcp-config.json`) and application state across container restarts and rebuilds.
 
 ## 3. Provider Architecture
 The system uses the **Strategy Pattern** for LLM integration:
