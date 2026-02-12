@@ -1,11 +1,11 @@
 # AI Context: MCP Orchestrator
 
 ## Metadata
-- **Last Updated**: 2026-02-11
-- **Version**: 1.0.0 (Phases 1-5 Complete + HTTP/SSE Support)
+- **Last Updated**: 2026-02-12
+- **Version**: 1.1.0 (Phases 1-5 Complete + HTTP/SSE Support + Multiple Tool Calls)
 - **Architectural Style**: Multi-MCP Orchestration with Health Monitoring
 - **Primary Tech Stack**: Node.js, TypeScript, Docker, Redis, Socket.io, MCP SDK, Vue.js
-- **Key Features**: Multi-MCP support, health monitoring, auto-reconnection, CLI management, web dashboard, HTTP/SSE transports, persistent configuration
+- **Key Features**: Multi-MCP support, multiple tool call handling, health monitoring, auto-reconnection, CLI management, web dashboard, HTTP/SSE transports, persistent configuration
 
 ## System Evolution
 
@@ -142,6 +142,42 @@ User → Web UI → Socket.IO → MCPAgent
   }
 }
 ```
+
+### MCPAgent Tool Call Queue (`src/services/MCPAgent.ts`)
+**Purpose**: Manages multiple tool calls from LLMs with sequential approval and parallel execution
+
+**Architecture**:
+```typescript
+private pendingCalls: Array<{
+  id: string;                    // Unique identifier
+  name: string;                  // Tool name
+  args: any;                     // Tool arguments
+  status: 'pending' | 'approved' | 'rejected' |
+          'executing' | 'completed' | 'failed';
+  result?: any;                  // Execution result
+  error?: string;                // Error message if failed
+}> = [];
+```
+
+**Workflow**:
+1. **Reception**: Store all tool calls with unique IDs
+2. **Sequential Approval**: Present tools one at a time (1 of N, 2 of N)
+3. **Queue Processing**: Track approved/rejected status
+4. **Parallel Execution**: Execute approved tools concurrently
+5. **Result Aggregation**: Collect and send results to LLM
+6. **Follow-up Support**: Queue cleared before LLM response to preserve new tool calls
+
+**Key Methods**:
+- `executeTool(callId, approved)` - Process approval decision
+- `processNextOrFinish()` - Handle next tool or trigger execution
+- `executeApprovedTools()` - Parallel execution with Promise.allSettled
+- `finishToolSequence()` - Aggregate results and clear queue
+
+**Benefits**:
+- User control with individual approval
+- Performance through parallel execution
+- Reliability with proper queue lifecycle management
+- Transparency with progress indicators
 
 ### CLI Tool (`src/cli/`)
 **Purpose**: Command-line interface for MCP management
@@ -524,6 +560,6 @@ Modify `MCPHealthMonitor` parameters:
 
 ---
 
-**System Status**: Production Ready (All 5 Phases Complete)
-**Last Updated**: 2026-02-11
-**Version**: 1.0.0
+**System Status**: Production Ready (All 5 Phases Complete + Multiple Tool Call Support)
+**Last Updated**: 2026-02-12
+**Version**: 1.1.0

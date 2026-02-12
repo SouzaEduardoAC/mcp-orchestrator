@@ -41,7 +41,66 @@ The system uses the **Strategy Pattern** for LLM integration:
 | Tool Execution Error | `try/catch` in `MCPAgent.executeTool` | `onToolError` event emitted to client. |
 | Expired Session | `JanitorService` (cron) | Container is pruned, history remains in Redis. |
 
-## 5. MCP Server Implementation
+## 5. Multiple Tool Call Management
+
+The `MCPAgent` implements a queue-based system for handling multiple tool calls from LLMs:
+
+### Architecture
+- **Queue Structure**: Array of tool call objects with status tracking
+  ```typescript
+  private pendingCalls: Array<{
+    id: string;
+    name: string;
+    args: any;
+    status: 'pending' | 'approved' | 'rejected' | 'executing' | 'completed' | 'failed';
+    result?: any;
+    error?: string;
+  }> = [];
+  ```
+
+### Workflow
+1. **Tool Call Reception** (`generateResponse`):
+   - All tool calls from LLM response are stored in queue
+   - Each assigned unique ID: `call_${timestamp}_${index}`
+   - First tool emitted for approval with position metadata (1 of N)
+
+2. **Sequential Approval** (`executeTool`):
+   - Updates tool status: `pending` → `approved` or `rejected`
+   - Triggers `processNextOrFinish()` to handle next step
+   - Rejected tools are skipped but don't block remaining tools
+
+3. **Queue Processing** (`processNextOrFinish`):
+   - Finds next pending tool and emits approval request
+   - If no pending tools, triggers parallel execution phase
+   - Maintains queue position for UI feedback
+
+4. **Parallel Execution** (`executeApprovedTools`):
+   - Uses `Promise.allSettled` for concurrent execution
+   - Status transitions: `approved` → `executing` → `completed`/`failed`
+   - Error handling: Failed tools don't block others
+
+5. **Result Aggregation** (`finishToolSequence`):
+   - Queue cleared **before** sending results to LLM (critical for preserving follow-up tools)
+   - Results formatted and sent back for next LLM iteration
+   - Supports recursive tool calling (LLM can request more tools based on results)
+
+### Socket Events
+- **Emit**: `tool:approval_required` with `{ name, args, callId, queuePosition, totalInQueue }`
+- **Receive**: `tool:approval` with `{ callId, approved: boolean }`
+- **Emit**: `tool:output` for each completed tool
+- **Emit**: `agent:error` for failed tools
+
+### Error Handling
+- **No Matching Call**: Emits error if approval received for non-existent callId
+- **Execution Failure**: Captured per-tool, doesn't affect other tools in queue
+- **Queue Lifecycle**: Cleared on cleanup, on sequence completion, and between sessions
+
+### Performance Characteristics
+- **Sequential Approval**: O(N) where N = number of tools (user interaction time)
+- **Parallel Execution**: O(1) time complexity for approved tools (concurrent execution)
+- **Memory**: O(N) for queue storage, cleared after completion
+
+## 6. MCP Server Implementation
 The system includes a production-ready MCP server (`mcp-server/index.js`):
 - **Transport**: StdioServerTransport for JSON-RPC communication
 - **Tools Implemented**:
@@ -52,7 +111,7 @@ The system includes a production-ready MCP server (`mcp-server/index.js`):
 - **Isolation**: Each session gets a dedicated container with isolated /workspace
 - **Security**: No network access, 512MB RAM limit, 0.5 CPU limit
 
-## 6. API Endpoints
+## 7. API Endpoints
 - **GET `/api/models/available`**: Returns models accessible with current API key (dynamic testing, ~5-10s response time)
 - **GET `/api/models/check`**: Diagnostic endpoint showing detailed model availability status
 - **GET `/api/mcp/health`**: Returns health status for all configured MCPs with summary metrics
@@ -63,7 +122,7 @@ The system includes a production-ready MCP server (`mcp-server/index.js`):
   - **Side Effects**: Updates `mcp-config.json`, emits `mcpAdded` event
 - **Static Files**: Served from `/public` directory (Vue.js SPA)
 
-## 7. Complexity Concerns
+## 8. Complexity Concerns
 - **History Load**: O(N) where N is history size. History is capped at 50 messages to prevent token overflow and latency.
 - **MCP Transport**: Uses JSON-RPC over stdio via Docker attach. Communication overhead is minimal but dependent on Docker daemon responsiveness.
 - **Model Detection**: `/api/models/available` makes real API calls to test each model (~1s per model). Results are not cached.

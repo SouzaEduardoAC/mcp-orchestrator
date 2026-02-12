@@ -9,6 +9,7 @@ The **MCP Orchestrator** is a production-ready platform that enables LLMs (Claud
 ### Multi-MCP Support
 - **Multiple MCP Servers**: Connect to unlimited MCP servers simultaneously
 - **Tool Aggregation**: Automatically combines tools from all connected MCPs
+- **Multiple Tool Calls**: Sequential approval with parallel execution for optimal performance
 - **Smart Namespacing**: Automatic conflict resolution with configurable prefixes
 - **Transport Flexibility**: Supports HTTP, stdio, SSE, and Docker transports
 
@@ -38,6 +39,12 @@ The **MCP Orchestrator** is a production-ready platform that enables LLMs (Claud
 - **Session Management**: Secure, isolated workspaces per user
 
 ## ✨ What's New
+
+**Multiple Tool Call Support** - LLMs can now request multiple tools simultaneously! The orchestrator handles:
+- **Sequential Approval**: Tools are presented one at a time with clear progress indicators (1 of 3, 2 of 3, etc.)
+- **Parallel Execution**: Once all approved, tools execute simultaneously for optimal performance
+- **Smart Queue Management**: Follow-up tools based on results are preserved and processed correctly
+- **Visual Feedback**: UI shows queue position and waiting status for remaining approvals
 
 **Web-Based MCP Creation** - You can now add MCP servers directly through the web interface without using the CLI! Simply click the "+ Add MCP" button in the MCP Management tab to create new servers with a user-friendly graphical form supporting all transport types (HTTP, SSE, Stdio, Stdio-Docker).
 
@@ -266,6 +273,46 @@ Default filesystem MCP provides:
 | `write_file` | Write to files | Create or update files |
 | `list_files` | List directory contents | Browse workspace |
 | `execute_command` | Run bash commands | Install packages, run scripts |
+
+## 🔄 Multiple Tool Call Workflow
+
+When LLMs need to use multiple tools (e.g., reading several files or querying multiple APIs), the orchestrator provides an optimized approval and execution workflow:
+
+### How It Works
+
+1. **LLM Request**: The LLM returns multiple tool calls in a single response
+2. **Queue Management**: All tool calls are stored in a queue with status tracking
+3. **Sequential Approval**: Tools are presented one at a time for user approval
+   - Clear progress indicators: "Tool Approval Request (1 of 3)"
+   - User can approve or reject each tool individually
+4. **Parallel Execution**: Once all tools are approved, they execute simultaneously
+5. **Result Aggregation**: Results are collected and sent back to the LLM
+6. **Follow-up Handling**: If the LLM needs additional tools based on results, the cycle continues
+
+### Example Scenario
+
+```
+User: "Read package.json, README.md, and check the git status"
+
+Orchestrator:
+├─ Approval Request (1 of 3): read_file(package.json) → ✓ Approved
+├─ Approval Request (2 of 3): read_file(README.md)    → ✓ Approved
+├─ Approval Request (3 of 3): execute_command(git status) → ✓ Approved
+│
+├─ [Parallel Execution]
+│  ├─ read_file(package.json) ✓ Complete
+│  ├─ read_file(README.md) ✓ Complete
+│  └─ execute_command(git status) ✓ Complete
+│
+└─ Results sent to LLM → LLM analyzes and responds
+```
+
+### Benefits
+
+- **User Control**: Approve each tool individually with full context
+- **Performance**: Parallel execution minimizes wait time
+- **Reliability**: Smart queue management prevents tool loss
+- **Transparency**: Clear visibility into multi-tool workflows
 
 ## 📁 Configuration File
 
