@@ -8,7 +8,13 @@ import { MCPHealthMonitor } from './MCPHealthMonitor';
 export interface AgentEvents {
   onThinking: () => void;
   onResponse: (text: string) => void;
-  onToolApprovalRequired: (toolName: string, args: any, callId: string) => void;
+  onToolApprovalRequired: (
+    toolName: string,
+    args: any,
+    callId: string,
+    queuePosition?: number,
+    totalInQueue?: number
+  ) => void;
   onToolOutput: (output: string) => void;
   onError: (error: string) => void;
 }
@@ -17,8 +23,15 @@ export class MCPAgent {
   private connectionManager: MCPConnectionManager;
   private healthMonitor: MCPHealthMonitor;
 
-  // Pending tool call state
-  private pendingCall: { id: string; name: string; args: any } | null = null;
+  // Pending tool calls queue
+  private pendingCalls: Array<{
+    id: string;
+    name: string;
+    args: any;
+    status: 'pending' | 'approved' | 'rejected' | 'executing' | 'completed' | 'failed';
+    result?: any;
+    error?: string;
+  }> = [];
 
   constructor(
     private provider: LLMProvider,
@@ -89,14 +102,23 @@ export class MCPAgent {
 
       // 5. Handle Tool Calls
       if (result.toolCalls && result.toolCalls.length > 0) {
-          const call = result.toolCalls[0]; // Handle single call for simplicity
-          this.pendingCall = {
-              id: call.id || "call_" + Date.now(),
+          // Store ALL tool calls with unique IDs
+          this.pendingCalls = result.toolCalls.map((call, index) => ({
+              id: call.id || `call_${Date.now()}_${index}`,
               name: call.name,
-              args: call.args
-          };
+              args: call.args,
+              status: 'pending'
+          }));
 
-          this.events.onToolApprovalRequired(call.name, call.args, this.pendingCall.id);
+          // Emit first pending tool for approval
+          const firstCall = this.pendingCalls[0];
+          this.events.onToolApprovalRequired(
+              firstCall.name,
+              firstCall.args,
+              firstCall.id,
+              1, // queuePosition
+              this.pendingCalls.length // totalInQueue
+          );
           return;
       }
 
@@ -113,44 +135,112 @@ export class MCPAgent {
     }
   }
 
-  async executeTool(callId: string) {
-      if (!this.pendingCall || this.pendingCall.id !== callId) {
+  async executeTool(callId: string, approved: boolean = true) {
+      const callIndex = this.pendingCalls.findIndex(c => c.id === callId);
+      if (callIndex === -1) {
           this.events.onError("No matching pending tool call");
+          return;
+      }
+
+      const call = this.pendingCalls[callIndex];
+
+      // Handle rejection
+      if (!approved) {
+          call.status = 'rejected';
+          await this.processNextOrFinish();
+          return;
+      }
+
+      // Mark as approved
+      call.status = 'approved';
+      await this.processNextOrFinish();
+  }
+
+  private async processNextOrFinish() {
+      // Find next pending tool
+      const nextPending = this.pendingCalls.find(c => c.status === 'pending');
+
+      if (nextPending) {
+          // Request approval for next tool
+          const position = this.pendingCalls.findIndex(c => c.id === nextPending.id) + 1;
+          this.events.onToolApprovalRequired(
+              nextPending.name,
+              nextPending.args,
+              nextPending.id,
+              position,
+              this.pendingCalls.length
+          );
+      } else {
+          // All tools processed, execute approved ones
+          await this.executeApprovedTools();
+      }
+  }
+
+  private async executeApprovedTools() {
+      const approved = this.pendingCalls.filter(c => c.status === 'approved');
+      if (approved.length === 0) {
+          await this.finishToolSequence();
           return;
       }
 
       this.events.onThinking();
 
-      try {
-          const result = await this.connectionManager.executeTool(
-            this.pendingCall.name,
-            this.pendingCall.args
-          );
+      // Execute all approved tools in parallel
+      const results = await Promise.allSettled(
+          approved.map(async (call) => {
+              call.status = 'executing';
+              try {
+                  const result = await this.connectionManager.executeTool(call.name, call.args);
+                  call.status = 'completed';
+                  call.result = result;
+                  return result;
+              } catch (e: any) {
+                  call.status = 'failed';
+                  call.error = e.message;
+                  throw e;
+              }
+          })
+      );
 
-          // Serialize output
-          const outputText = JSON.stringify(result.content);
-          this.events.onToolOutput(outputText);
+      // Emit outputs
+      for (let i = 0; i < results.length; i++) {
+          const result = results[i];
+          const call = approved[i];
+          if (result.status === 'fulfilled') {
+              const outputText = JSON.stringify(result.value.content);
+              this.events.onToolOutput(outputText);
+              await this.conversationRepo.addMessage(this.sessionId, {
+                  role: 'tool',
+                  content: `Tool ${call.name}: ${outputText}`,
+                  timestamp: Date.now()
+              });
+          } else {
+              this.events.onError(`Tool ${call.name} failed: ${call.error}`);
+          }
+      }
 
-          // Feed back to Repository
-          await this.conversationRepo.addMessage(this.sessionId, {
-              role: 'tool',
-              content: `Tool Output: ${outputText}`,
-              timestamp: Date.now()
-          });
+      await this.finishToolSequence();
+  }
 
-          // Recurse with system message
-          await this.generateResponse(`(System) Tool execution result: ${outputText}`);
+  private async finishToolSequence() {
+      const completed = this.pendingCalls.filter(c => c.status === 'completed');
 
-          this.pendingCall = null;
+      // Aggregate results and feed back to LLM
+      const resultsText = completed.map(c =>
+          `${c.name}: ${JSON.stringify(c.result?.content)}`
+      ).join('\n');
 
-      } catch (e: any) {
-          this.events.onError(`Tool execution failed: ${e.message}`);
-          this.pendingCall = null;
+      // Clear queue BEFORE calling generateResponse to avoid clearing new tool calls
+      this.pendingCalls = [];
+
+      if (resultsText) {
+          await this.generateResponse(`(System) Tool execution results:\n${resultsText}`);
       }
   }
   
   async cleanup() {
       try {
+          this.pendingCalls = []; // Clear queue
           this.healthMonitor.stop();
           await this.connectionManager.cleanup();
       } catch (e) { console.error("Error cleaning up MCP connections", e); }

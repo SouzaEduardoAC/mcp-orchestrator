@@ -43,7 +43,14 @@ export class SocketRegistry {
           {
             onThinking: () => socket.emit('agent:thinking'),
             onResponse: (text) => socket.emit('agent:response', text),
-            onToolApprovalRequired: (name, args, callId) => socket.emit('tool:approval_required', { name, args, callId }),
+            onToolApprovalRequired: (name, args, callId, queuePosition, totalInQueue) =>
+                socket.emit('tool:approval_required', {
+                    name,
+                    args,
+                    callId,
+                    queuePosition: queuePosition || 1,
+                    totalInQueue: totalInQueue || 1
+                }),
             onToolOutput: (output) => socket.emit('tool:output', output),
             onError: (err) => socket.emit('agent:error', err)
           },
@@ -60,12 +67,7 @@ export class SocketRegistry {
         });
 
         socket.on('tool:approval', async (data: { callId: string, approved: boolean }) => {
-            if (data.approved) {
-                await agent.executeTool(data.callId);
-            } else {
-                // Handle rejection logic if needed
-                socket.emit('agent:response', "Tool execution denied by user.");
-            }
+            await agent.executeTool(data.callId, data.approved);
         });
 
         socket.on('disconnect', async () => {

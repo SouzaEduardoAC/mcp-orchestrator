@@ -109,7 +109,13 @@
 
                     <div v-if="msg.role === 'approval'" class="self-start w-full max-w-md bg-gray-800 border border-yellow-700/50 rounded-lg p-4 my-2">
                         <div class="flex items-center justify-between mb-2">
-                            <span class="text-yellow-500 font-semibold text-sm uppercase tracking-wider">Tool Approval Request</span>
+                            <span class="text-yellow-500 font-semibold text-sm uppercase tracking-wider">
+                                Tool Approval Request
+                                <!-- Show queue position if multiple tools -->
+                                <span v-if="msg.totalInQueue > 1" class="text-xs text-gray-400 ml-2">
+                                    ({{ msg.queuePosition }} of {{ msg.totalInQueue }})
+                                </span>
+                            </span>
                             <span class="text-xs text-gray-500">{{ msg.data.callId }}</span>
                         </div>
                         <div class="mb-3">
@@ -127,6 +133,10 @@
                         </div>
                         <div v-else class="text-sm text-center py-1 font-medium" :class="msg.status === 'approved' ? 'text-green-400' : 'text-red-400'">
                             {{ msg.status === 'approved' ? 'Approved & Executing...' : 'Rejected' }}
+                            <!-- Show waiting message if more tools pending -->
+                            <span v-if="msg.status === 'approved' && msg.totalInQueue > msg.queuePosition" class="block text-blue-400 text-xs mt-1">
+                                Waiting for approval of remaining {{ msg.totalInQueue - msg.queuePosition }} tool(s)...
+                            </span>
                         </div>
 
                         <div v-if="msg.output" class="mt-3 pt-2 border-t border-gray-700">
@@ -622,7 +632,14 @@
                     socket.value.on('tool:approval_required', (data) => {
                         isThinking.value = false;
                         messages.value = messages.value.filter(m => m.role !== 'thinking');
-                        messages.value.push({ role: 'approval', data: data, status: null, output: null });
+                        messages.value.push({
+                            role: 'approval',
+                            data: data,
+                            status: null,
+                            output: null,
+                            queuePosition: data.queuePosition || 1,
+                            totalInQueue: data.totalInQueue || 1
+                        });
                         scrollToBottom();
                     });
                     socket.value.on('tool:output', (output) => {
