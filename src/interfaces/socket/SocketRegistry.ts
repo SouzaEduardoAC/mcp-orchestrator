@@ -7,6 +7,8 @@ import { AgentFactory } from '../../services/factories/AgentFactory';
 
 export class SocketRegistry {
   private agents: Map<string, MCPAgent> = new Map();
+  private requestQueues: Map<string, number> = new Map();
+  private readonly MAX_REQUESTS_PER_USER = 5; // Phase 2: Backpressure limit
 
   constructor(
     private io: Server,
@@ -14,6 +16,45 @@ export class SocketRegistry {
     private conversationRepo: ConversationRepository,
     private dockerClient: DockerClient
   ) {}
+
+  /**
+   * Handle message with backpressure control.
+   * Limits concurrent requests per user to prevent memory explosion.
+   */
+  private async handleMessageWithBackpressure(
+    socket: Socket,
+    sessionId: string,
+    handler: () => Promise<void>
+  ): Promise<void> {
+    const queueSize = this.requestQueues.get(socket.id) || 0;
+
+    if (queueSize >= this.MAX_REQUESTS_PER_USER) {
+      socket.emit('agent:error', {
+        message: `Too many concurrent requests (max: ${this.MAX_REQUESTS_PER_USER}). Please wait for previous requests to complete.`,
+        code: 'TOO_MANY_REQUESTS'
+      });
+      return;
+    }
+
+    this.requestQueues.set(socket.id, queueSize + 1);
+
+    try {
+      await handler();
+    } catch (error) {
+      console.error(`[Socket] Error handling request for ${sessionId}:`, error);
+      socket.emit('agent:error', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        code: 'REQUEST_ERROR'
+      });
+    } finally {
+      const currentSize = this.requestQueues.get(socket.id) || 1;
+      if (currentSize <= 1) {
+        this.requestQueues.delete(socket.id);
+      } else {
+        this.requestQueues.set(socket.id, currentSize - 1);
+      }
+    }
+  }
 
   public initialize() {
     this.io.on('connection', async (socket: Socket) => {
@@ -61,19 +102,24 @@ export class SocketRegistry {
         await agent.initialize();
         this.agents.set(socket.id, agent);
 
-        // 3. Setup Events
+        // 3. Setup Events with Backpressure
         socket.on('message', async (text: string) => {
-            await agent.generateResponse(text);
+            await this.handleMessageWithBackpressure(socket, sessionId, async () => {
+              await agent.generateResponse(text);
+            });
         });
 
         socket.on('tool:approval', async (data: { callId: string, approved: boolean }) => {
-            await agent.executeTool(data.callId, data.approved);
+            await this.handleMessageWithBackpressure(socket, sessionId, async () => {
+              await agent.executeTool(data.callId, data.approved);
+            });
         });
 
         socket.on('disconnect', async () => {
            console.log(`[Socket] Disconnect: ${sessionId}`);
            await agent.cleanup();
            this.agents.delete(socket.id);
+           this.requestQueues.delete(socket.id); // Phase 2: Clean up request queue
            // We do NOT terminate the session here, enabling reconnection.
            // The Janitor will clean it up if they don't come back.
         });

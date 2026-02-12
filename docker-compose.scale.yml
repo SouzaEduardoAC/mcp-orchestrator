@@ -1,0 +1,95 @@
+version: '3.8'
+
+services:
+  # Redis for shared session state
+  redis:
+    image: redis:7-alpine
+    container_name: mcp-redis
+    command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - app_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # MCP Server Image Builder
+  mcp-placeholder:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    image: mcp-server:latest
+    container_name: mcp-server-template
+    command: ["echo", "MCP Server Image Built and Registered"]
+    restart: "no"
+    networks:
+      - app_network
+
+  # Orchestrator App - Multiple Instances
+  app:
+    build: .
+    image: mcp-orchestrator-app:latest
+    deploy:
+      replicas: 4  # Run 4 instances for horizontal scaling
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - PORT=3000
+      # Phase 2: Container Pooling
+      - ENABLE_CONTAINER_POOL=${ENABLE_CONTAINER_POOL:-false}
+      - POOL_MIN_SIZE=${POOL_MIN_SIZE:-10}
+      - POOL_MAX_SIZE=${POOL_MAX_SIZE:-100}
+      - POOL_IDLE_TIMEOUT_MS=${POOL_IDLE_TIMEOUT_MS:-900000}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - mcp-config:/usr/src/app
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    depends_on:
+      redis:
+        condition: service_healthy
+      mcp-placeholder:
+        condition: service_started
+    networks:
+      - app_network
+    restart: unless-stopped
+
+  # Nginx Load Balancer
+  nginx:
+    image: nginx:alpine
+    container_name: mcp-nginx
+    ports:
+      - "3000:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - app
+    networks:
+      - app_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+networks:
+  app_network:
+    driver: bridge
+
+volumes:
+  redis-data:
+    driver: local
+  mcp-config:
+    driver: local

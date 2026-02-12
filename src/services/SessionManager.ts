@@ -1,10 +1,12 @@
 import { DockerClient } from '../infrastructure/docker/DockerClient';
+import { ContainerPool } from '../infrastructure/docker/ContainerPool';
 import { SessionRepository, SessionData } from '../domain/session/SessionRepository';
 
 export class SessionManager {
   constructor(
     private dockerClient: DockerClient,
-    private sessionRepository: SessionRepository
+    private sessionRepository: SessionRepository,
+    private containerPool?: ContainerPool
   ) {}
 
   async acquireSession(sessionId: string, image: string = 'mcp-server:latest', env: Record<string, string> = {}, cmd?: string[]): Promise<SessionData> {
@@ -26,9 +28,13 @@ export class SessionManager {
     }
 
     try {
-        const container = await this.dockerClient.spawnContainer(image, env, cmd);
+        // Use container pool if available, otherwise create directly
+        const container = this.containerPool
+          ? await this.containerPool.acquire(sessionId)
+          : await this.dockerClient.spawnContainer(image, env, cmd);
+
         await this.sessionRepository.saveSession(sessionId, container.id);
-        
+
         return {
             containerId: container.id,
             startTime: Date.now(),
@@ -44,7 +50,13 @@ export class SessionManager {
     const session = await this.sessionRepository.getSession(sessionId);
     if (!session) return;
 
-    await this.dockerClient.stopContainer(session.containerId);
+    // Release to pool if available, otherwise destroy directly
+    if (this.containerPool) {
+      await this.containerPool.release(sessionId);
+    } else {
+      await this.dockerClient.stopContainer(session.containerId);
+    }
+
     await this.sessionRepository.deleteSession(sessionId);
   }
 }
