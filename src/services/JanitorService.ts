@@ -25,16 +25,15 @@ export class JanitorService {
 
   async run() {
     try {
-      const sessionIds = await this.sessionRepository.getAllSessions();
-      const now = Date.now();
+      // Use efficient index-based query to get only expired sessions
+      const expiredSessionIds = await this.sessionRepository.getExpiredSessions(this.MAX_IDLE_TIME_MS);
 
-      for (const id of sessionIds) {
+      for (const id of expiredSessionIds) {
+        // Verify session still exists and is expired (double-check to avoid race conditions)
         const session = await this.sessionRepository.getSession(id);
-        if (session) {
-          if (now - session.lastActive > this.MAX_IDLE_TIME_MS) {
-            console.log(`[Janitor] Terminating expired session: ${id}`);
-            await this.sessionManager.terminateSession(id);
-          }
+        if (session && Date.now() - session.lastActive > this.MAX_IDLE_TIME_MS) {
+          console.log(`[Janitor] Terminating expired session: ${id}`);
+          await this.sessionManager.terminateSession(id);
         }
       }
     } catch (error) {

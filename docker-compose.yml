@@ -28,6 +28,10 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       # Persist MCP configuration across restarts
       - mcp-config:/usr/src/app
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     depends_on:
       mcp-placeholder:
         condition: service_started

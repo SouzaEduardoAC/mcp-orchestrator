@@ -12,7 +12,8 @@ export interface SessionRepository {
   getSession(id: string): Promise<SessionData | null>;
   updateHeartbeat(id: string): Promise<void>;
   deleteSession(id: string): Promise<void>;
-  getAllSessions(): Promise<string[]>; 
+  getAllSessions(): Promise<string[]>;
+  getExpiredSessions(inactiveThresholdMs: number): Promise<string[]>;
   acquireLock(id: string, ttlMs: number): Promise<boolean>;
 }
 
@@ -20,6 +21,7 @@ export class RedisSessionRepository implements SessionRepository {
   private redis: RedisClientType | null = null;
   private readonly PREFIX = 'mcp:session:';
   private readonly LOCK_PREFIX = 'mcp:lock:';
+  private readonly INDEX_KEY = 'mcp:session:index'; // Sorted set by lastActive timestamp
 
   private async getRedis(): Promise<RedisClientType> {
     if (!this.redis) {
@@ -47,7 +49,12 @@ export class RedisSessionRepository implements SessionRepository {
       startTime: now,
       lastActive: now,
     };
-    await client.set(key, JSON.stringify(data));
+    // Use pipeline for atomic operations
+    await client
+      .multi()
+      .set(key, JSON.stringify(data))
+      .zAdd(this.INDEX_KEY, { score: now, value: id })
+      .exec();
   }
 
   async getSession(id: string): Promise<SessionData | null> {
@@ -61,22 +68,58 @@ export class RedisSessionRepository implements SessionRepository {
   async updateHeartbeat(id: string): Promise<void> {
     const session = await this.getSession(id);
     if (session) {
-      session.lastActive = Date.now();
+      const now = Date.now();
+      session.lastActive = now;
       const client = await this.getRedis();
       const key = `${this.PREFIX}${id}`;
-      await client.set(key, JSON.stringify(session));
+      // Use pipeline to update both session data and index atomically
+      await client
+        .multi()
+        .set(key, JSON.stringify(session))
+        .zAdd(this.INDEX_KEY, { score: now, value: id })
+        .exec();
     }
   }
 
   async deleteSession(id: string): Promise<void> {
     const client = await this.getRedis();
     const key = `${this.PREFIX}${id}`;
-    await client.del(key);
+    // Use pipeline to remove both session data and index entry atomically
+    await client
+      .multi()
+      .del(key)
+      .zRem(this.INDEX_KEY, id)
+      .exec();
   }
 
   async getAllSessions(): Promise<string[]> {
-      const client = await this.getRedis();
-      const keys = await client.keys(`${this.PREFIX}*`);
-      return keys.map(k => k.replace(this.PREFIX, ''));
+    const client = await this.getRedis();
+    const sessions: string[] = [];
+    let cursor = '0';
+
+    // Use SCAN instead of KEYS to avoid blocking Redis
+    do {
+      const result = await client.scan(cursor, {
+        MATCH: `${this.PREFIX}*`,
+        COUNT: 100
+      });
+      cursor = result.cursor;
+      sessions.push(...result.keys.map(k => k.replace(this.PREFIX, '')));
+    } while (cursor !== '0');
+
+    return sessions;
+  }
+
+  /**
+   * Get sessions that have been inactive for longer than the specified threshold.
+   * Uses sorted set index for efficient queries.
+   */
+  async getExpiredSessions(inactiveThresholdMs: number): Promise<string[]> {
+    const client = await this.getRedis();
+    const cutoffTime = Date.now() - inactiveThresholdMs;
+
+    // Query sorted set for sessions with lastActive < cutoffTime
+    const expiredIds = await client.zRangeByScore(this.INDEX_KEY, 0, cutoffTime);
+    return expiredIds;
   }
 }
