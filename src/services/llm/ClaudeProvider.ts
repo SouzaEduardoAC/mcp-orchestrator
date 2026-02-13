@@ -5,6 +5,9 @@ import { LLMProvider, LLMResult, ToolDefinition } from '../../interfaces/llm/LLM
 export class ClaudeProvider implements LLMProvider {
   private client: Anthropic;
   private model: string;
+  private readonly maxOutputTokens = parseInt(
+    process.env.MAX_OUTPUT_TOKENS || '8192'
+  );
 
   constructor(apiKey: string, model?: string) {
     this.client = new Anthropic({ apiKey });
@@ -33,7 +36,7 @@ export class ClaudeProvider implements LLMProvider {
 
     const response = await this.client.messages.create({
       model: this.model,
-      max_tokens: 1024,
+      max_tokens: this.maxOutputTokens,
       messages,
       tools: claudeTools.length > 0 ? claudeTools : undefined
     });
