@@ -14,7 +14,7 @@
 ## 2. State Changes & Persistence
 - **Redis (Cache/Store)**:
     - **SessionRepository**: Tracks container metadata and heartbeat (`mcp:session:{id}`).
-    - **ConversationRepository**: Stores message history as a sliding window (max 50 messages) (`mcp:conversation:{id}`).
+    - **ConversationRepository**: Stores message history with token-aware truncation (default: 30k tokens, max 50 messages) (`mcp:conversation:{id}`). Supports optional gzip compression.
 - **Docker (Compute)**:
     - Ephemeral containers run MCP servers. The state within the container is isolated per session.
 - **Docker Volumes**:
@@ -25,9 +25,13 @@ The system uses the **Strategy Pattern** for LLM integration:
 - **`LLMProvider` Interface**: Defines `generateResponse(history, prompt, tools)`.
 - **Implementations**:
     - `GeminiProvider`: Uses `@google/generative-ai`. Supports runtime model selection (default: gemini-2.0-flash-exp).
-    - `ClaudeProvider`: Uses `@anthropic-ai/sdk`. Supports runtime model selection (default: claude-sonnet-4-5-20250929).
+    - `ClaudeProvider`: Uses `@anthropic-ai/sdk`. Supports runtime model selection (default: claude-sonnet-4-5-20250929). Configurable `max_tokens` via `MAX_OUTPUT_TOKENS` env var (default: 8192).
     - `OpenAIProvider`: Uses `openai`. Supports runtime model selection (default: gpt-4o).
 - **Model Selection**: All providers accept optional `model` parameter in constructor for runtime override.
+- **Token Configuration**:
+    - `MAX_OUTPUT_TOKENS`: Controls response length (default: 8192 tokens)
+    - `MAX_HISTORY_TOKENS`: Controls conversation history size (default: 30000 tokens)
+    - `ENABLE_CONVERSATION_COMPRESSION`: Enables gzip compression for history (default: false)
 - **Supported Models**:
     - **Claude**: Sonnet 4.5, Opus 4.6, Haiku 4.5, Claude 3 family
     - **Gemini**: 2.0 Flash, 1.5 Flash, 1.5 Pro
@@ -40,6 +44,8 @@ The system uses the **Strategy Pattern** for LLM integration:
 | Redis Down | `RedisFactory` throws Error | Bootstrap fails or session init fails. |
 | Tool Execution Error | `try/catch` in `MCPAgent.executeTool` | `onToolError` event emitted to client. |
 | Expired Session | `JanitorService` (cron) | Container is pruned, history remains in Redis. |
+| Context Window Overflow | Pre-flight check in `MCPAgent` | Clears history and retries with fresh context. |
+| Response Truncation | Configurable `max_tokens` in provider | Increase `MAX_OUTPUT_TOKENS` environment variable. |
 
 ## 5. Multiple Tool Call Management
 
@@ -123,7 +129,8 @@ The system includes a production-ready MCP server (`mcp-server/index.js`):
 - **Static Files**: Served from `/public` directory (Vue.js SPA)
 
 ## 8. Complexity Concerns
-- **History Load**: O(N) where N is history size. History is capped at 50 messages to prevent token overflow and latency.
+- **History Load**: O(N) where N is history size. History is truncated based on token count (default: 30k tokens) and message count (max: 50). Token estimation uses character-based heuristic (1 token ≈ 4 characters).
+- **Token Budget Management**: Total input tokens (history + tools + prompt) validated before LLM call. With many MCPs, tool definitions can consume 80-100k tokens, requiring conservative history limits.
 - **MCP Transport**: Uses JSON-RPC over stdio via Docker attach. Communication overhead is minimal but dependent on Docker daemon responsiveness.
 - **Model Detection**: `/api/models/available` makes real API calls to test each model (~1s per model). Results are not cached.
 - **Docker Socket Permissions**: Container runs as `node` user in `docker` group (GID 990) for socket access.

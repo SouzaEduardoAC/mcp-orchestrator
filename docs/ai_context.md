@@ -1,11 +1,11 @@
 # AI Context: MCP Orchestrator
 
 ## Metadata
-- **Last Updated**: 2026-02-12
-- **Version**: 1.1.0 (Phases 1-5 Complete + HTTP/SSE Support + Multiple Tool Calls)
+- **Last Updated**: 2026-02-13
+- **Version**: 1.2.0 (Phases 1-5 Complete + HTTP/SSE Support + Multiple Tool Calls + Token Management)
 - **Architectural Style**: Multi-MCP Orchestration with Health Monitoring
 - **Primary Tech Stack**: Node.js, TypeScript, Docker, Redis, Socket.io, MCP SDK, Vue.js
-- **Key Features**: Multi-MCP support, multiple tool call handling, health monitoring, auto-reconnection, CLI management, web dashboard, HTTP/SSE transports, persistent configuration
+- **Key Features**: Multi-MCP support, multiple tool call handling, health monitoring, auto-reconnection, CLI management, web dashboard, HTTP/SSE transports, persistent configuration, configurable token limits, conversation compression
 
 ## System Evolution
 
@@ -516,6 +516,67 @@ docker ps                 # List running containers
 5. **Tool Approval**: Human-in-the-loop for sensitive operations
 6. **Session Isolation**: Unique workspace per user
 
+## Token Management
+
+### Configuration
+The system manages token usage to prevent context window overflow and response truncation:
+
+**Environment Variables**:
+```env
+MAX_OUTPUT_TOKENS=8192      # Max tokens for LLM responses (default: 8192)
+MAX_HISTORY_TOKENS=30000    # Max tokens in conversation history (default: 30000)
+ENABLE_CONVERSATION_COMPRESSION=true  # Compress history with gzip (60-80% reduction)
+HISTORY_TTL_SECONDS=86400   # Redis TTL for history keys (default: 24h)
+```
+
+### Token Budget (200k Context Window)
+With multiple MCPs connected, the token allocation is:
+- **History**: 30k tokens (configurable, kept recent)
+- **Tool Definitions**: 80-100k tokens (MCP tool schemas)
+- **Current Prompt**: 5-10k tokens (user input)
+- **Response Buffer**: 5k tokens (safety margin)
+- **Headroom**: ~55k tokens
+
+### Implementation
+
+**ConversationRepository** (`src/domain/conversation/ConversationRepository.ts`):
+- Token-aware truncation (keeps most recent messages within limit)
+- Optional gzip compression (60-80% memory savings)
+- Automatic expiration (24h TTL by default)
+- Fast token estimation (1 token ≈ 4 characters heuristic)
+
+**MCPAgent** (`src/services/MCPAgent.ts`):
+- Pre-flight validation (checks total tokens before sending to LLM)
+- Automatic recovery (clears history if context window exceeded)
+- Token usage logging (history, prompt, tools, total, utilization %)
+- Fallback to fresh context on overflow
+
+**TokenCounter** (`src/utils/TokenCounter.ts`):
+- Character-based estimation (4 chars ≈ 1 token)
+- Accounts for message content, tool calls, tool responses
+- Fast approximation (no external tokenizer needed)
+
+### Troubleshooting
+
+**"prompt is too long" error (218k > 200k)**:
+- Root cause: History + tool definitions + prompt exceeds context window
+- Solution: Reduce MAX_HISTORY_TOKENS or disable unused MCPs
+- Automatic: System clears history and retries with fresh context
+
+**Response truncation (cut off mid-sentence)**:
+- Root cause: MAX_OUTPUT_TOKENS too low (was 1024)
+- Solution: Increased to 8192 (Claude Sonnet 4.5 maximum)
+- Configurable: Adjust via MAX_OUTPUT_TOKENS environment variable
+
+### Token Estimation Accuracy
+The character-based heuristic (4 chars = 1 token) provides:
+- ✅ Fast estimation without external dependencies
+- ✅ Good enough for history management
+- ⚠️ May underestimate for JSON/code (densely packed)
+- ⚠️ May overestimate for natural language (whitespace)
+
+For precise token counting, consider integrating `tiktoken` library.
+
 ## Performance Characteristics
 
 - Health check interval: 60s (configurable)
@@ -525,6 +586,8 @@ docker ps                 # List running containers
 - Container memory: 512MB (configurable)
 - Container CPU: 0.5 cores (configurable)
 - Tool execution timeout: 30s
+- **Token limits**: 8192 output, 30000 history (configurable)
+- **Context window**: 200k tokens (Claude Sonnet 4.5)
 
 ## Extension Points
 
@@ -560,6 +623,6 @@ Modify `MCPHealthMonitor` parameters:
 
 ---
 
-**System Status**: Production Ready (All 5 Phases Complete + Multiple Tool Call Support)
-**Last Updated**: 2026-02-12
-**Version**: 1.1.0
+**System Status**: Production Ready (All 5 Phases Complete + Multiple Tool Call Support + Token Management)
+**Last Updated**: 2026-02-13
+**Version**: 1.2.0

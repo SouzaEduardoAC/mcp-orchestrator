@@ -26,9 +26,10 @@ The MCP Orchestrator is a middleware service that enables Large Language Models 
 
 6. **Conversational Loop**:
     - User sends a prompt
-    - Agent retrieves conversation history from Redis
+    - Agent retrieves conversation history from Redis (token-aware truncation, default: 30k tokens)
+    - Agent validates total token budget (history + tools + prompt < 195k tokens)
     - Agent discovers available tools (read_file, write_file, list_files, execute_command) within the Dockerized MCP server
-    - LLM generates a response or requests a tool execution
+    - LLM generates a response (configurable length, default: 8k tokens) or requests a tool execution
 
 7. **Human-in-the-Loop (HITL)**: If a tool execution is requested, the system pauses for user approval.
 

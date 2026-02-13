@@ -69,10 +69,15 @@ The **MCP Orchestrator** is a production-ready platform that enables LLMs (Claud
 ### 1. Configuration
 Create a `.env` file in the root directory:
 ```env
+# LLM Provider Selection
 LLM_PROVIDER=claude          # choices: gemini, claude, openai
 GEMINI_API_KEY=your_key_here
 ANTHROPIC_API_KEY=your_key_here
 OPENAI_API_KEY=your_key_here
+
+# LLM Response Configuration (Optional)
+MAX_OUTPUT_TOKENS=8192       # Max tokens for LLM responses (default: 8192)
+MAX_HISTORY_TOKENS=30000     # Max tokens in conversation history (default: 30000)
 ```
 
 ### 2. Start the System
@@ -273,6 +278,61 @@ Default filesystem MCP provides:
 | `write_file` | Write to files | Create or update files |
 | `list_files` | List directory contents | Browse workspace |
 | `execute_command` | Run bash commands | Install packages, run scripts |
+
+## ⚙️ LLM Response Configuration
+
+The orchestrator provides configurable token limits to optimize LLM responses and prevent context window overflow:
+
+### MAX_OUTPUT_TOKENS
+Controls the maximum length of LLM responses.
+
+- **Default**: 8,192 tokens (~32,000 characters)
+- **Purpose**: Allows comprehensive responses without truncation
+- **Impact**: Higher values increase API costs but ensure complete responses
+- **Range**: 1,024 - 8,192 tokens (Claude Sonnet 4.5 maximum)
+
+**Example**: Set to 4,096 for shorter responses and lower costs:
+```env
+MAX_OUTPUT_TOKENS=4096
+```
+
+### MAX_HISTORY_TOKENS
+Controls conversation history size sent to the LLM.
+
+- **Default**: 30,000 tokens
+- **Purpose**: Balances context retention with token budget
+- **Context Window Budget** (200k total):
+  - History: 30k tokens
+  - Tool definitions: 80-100k tokens (with many MCPs)
+  - Current prompt: 5-10k tokens
+  - Response buffer: 5k tokens
+  - Headroom: ~55k tokens
+
+**Why 30k?** With multiple MCPs connected, tool definitions can consume 80-100k+ tokens. The history limit must leave room for tools, prompts, and responses within Claude's 200k context window.
+
+**Example**: Increase for longer conversations (if you have fewer MCPs):
+```env
+MAX_HISTORY_TOKENS=50000
+```
+
+### Conversation Management
+The system automatically:
+- **Truncates history** when it exceeds MAX_HISTORY_TOKENS (keeps most recent messages)
+- **Clears history** if total input (history + tools + prompt) would exceed context window
+- **Compresses messages** when ENABLE_CONVERSATION_COMPRESSION is enabled
+- **Expires sessions** after 24 hours of inactivity (configurable via HISTORY_TTL_SECONDS)
+
+### Troubleshooting Token Errors
+
+**"prompt is too long" error:**
+1. Reduce MAX_HISTORY_TOKENS (default: 30,000)
+2. Enable conversation compression: `ENABLE_CONVERSATION_COMPRESSION=true`
+3. Disable unused MCPs to reduce tool definition tokens
+4. Clear conversation history by refreshing the page
+
+**Responses cut off mid-sentence:**
+1. Increase MAX_OUTPUT_TOKENS (default: 8,192)
+2. Check API provider's output token limits
 
 ## 🔄 Multiple Tool Call Workflow
 
