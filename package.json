@@ -6,8 +6,11 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
+    "start:optimized": "./start-optimized.sh",
+    "start:worker": "./start-worker.sh",
     "test": "jest",
     "dev": "ts-node src/index.ts",
+    "dev:worker": "ts-node src/worker.ts",
     "llm": "node dist/cli/index.js"
   },
   "bin": {

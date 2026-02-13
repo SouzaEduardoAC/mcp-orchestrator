@@ -1,0 +1,35 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mcp-orchestrator-ingress
+  namespace: mcp-orchestrator
+  annotations:
+    # Nginx ingress annotations
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/websocket-services: "mcp-orchestrator-service"
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/session-cookie-name: "mcp-route"
+    nginx.ingress.kubernetes.io/session-cookie-hash: "sha1"
+    # SSL/TLS (uncomment for production)
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    # nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: mcp-orchestrator.example.com  # Change to your domain
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: mcp-orchestrator-service
+            port:
+              number: 80
+  # TLS configuration (uncomment for production)
+  # tls:
+  # - hosts:
+  #   - mcp-orchestrator.example.com
+  #   secretName: mcp-orchestrator-tls

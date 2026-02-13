@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-orchestrator-service
+  namespace: mcp-orchestrator
+  labels:
+    app: mcp-orchestrator
+spec:
+  type: ClusterIP
+  sessionAffinity: ClientIP  # Sticky sessions for WebSocket
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800  # 3 hours
+  ports:
+    - port: 80
+      targetPort: 3000
+      protocol: TCP
+      name: http
+  selector:
+    app: mcp-orchestrator

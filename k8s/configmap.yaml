@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mcp-orchestrator-config
+  namespace: mcp-orchestrator
+data:
+  PORT: "3000"
+  LLM_PROVIDER: "gemini"
+  REDIS_URL: "redis://redis-service:6379"
+  # Phase 2: Container Pooling
+  ENABLE_CONTAINER_POOL: "true"
+  POOL_MIN_SIZE: "10"
+  POOL_MAX_SIZE: "100"
+  POOL_IDLE_TIMEOUT_MS: "900000"
+  # Phase 3: Worker Architecture
+  ENABLE_WORKER_MODE: "false"
+  WORKER_CONCURRENCY: "10"
+  JOB_TIMEOUT_MS: "300000"

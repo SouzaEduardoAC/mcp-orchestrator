@@ -1,0 +1,107 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-orchestrator
+  namespace: mcp-orchestrator
+  labels:
+    app: mcp-orchestrator
+    tier: backend
+spec:
+  replicas: 2  # Initial replicas, HPA will scale this
+  selector:
+    matchLabels:
+      app: mcp-orchestrator
+  template:
+    metadata:
+      labels:
+        app: mcp-orchestrator
+        tier: backend
+    spec:
+      containers:
+      - name: orchestrator
+        image: mcp-orchestrator-app:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3000
+          name: http
+          protocol: TCP
+        env:
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: mcp-orchestrator-config
+              key: PORT
+        - name: LLM_PROVIDER
+          valueFrom:
+            configMapKeyRef:
+              name: mcp-orchestrator-config
+              key: LLM_PROVIDER
+        - name: REDIS_URL
+          valueFrom:
+            configMapKeyRef:
+              name: mcp-orchestrator-config
+              key: REDIS_URL
+        - name: ENABLE_CONTAINER_POOL
+          valueFrom:
+            configMapKeyRef:
+              name: mcp-orchestrator-config
+              key: ENABLE_CONTAINER_POOL
+        - name: POOL_MIN_SIZE
+          valueFrom:
+            configMapKeyRef:
+              name: mcp-orchestrator-config
+              key: POOL_MIN_SIZE
+        - name: POOL_MAX_SIZE
+          valueFrom:
+            configMapKeyRef:
+              name: mcp-orchestrator-config
+              key: POOL_MAX_SIZE
+        - name: GEMINI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: mcp-orchestrator-secrets
+              key: GEMINI_API_KEY
+        - name: ANTHROPIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: mcp-orchestrator-secrets
+              key: ANTHROPIC_API_KEY
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: mcp-orchestrator-secrets
+              key: OPENAI_API_KEY
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+        volumeMounts:
+        - name: docker-socket
+          mountPath: /var/run/docker.sock
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+      volumes:
+      - name: docker-socket
+        hostPath:
+          path: /var/run/docker.sock
+          type: Socket
+      # Security context
+      securityContext:
+        fsGroup: 1000
