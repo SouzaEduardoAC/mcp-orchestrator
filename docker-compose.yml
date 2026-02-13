@@ -23,6 +23,8 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - PORT=3000
+      # Phase 3: Testing
+      - ENABLE_CONVERSATION_COMPRESSION=${ENABLE_CONVERSATION_COMPRESSION:-false}
     volumes:
       # Critical: Allows the Orchestrator to spawn sibling containers
       - /var/run/docker.sock:/var/run/docker.sock

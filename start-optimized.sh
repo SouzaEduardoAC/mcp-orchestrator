@@ -8,11 +8,8 @@
 
 # Node.js Memory and GC Tuning
 # --max-old-space-size: Maximum heap size (4GB)
-# --gc-interval: Run GC every 100 operations
 # --expose-gc: Enable manual GC triggering
-# --optimize-for-size: Prioritize memory over speed
 
 NODE_OPTIONS="--max-old-space-size=4096 \
-              --expose-gc \
-              --optimize-for-size" \
+              --expose-gc" \
 node dist/index.js

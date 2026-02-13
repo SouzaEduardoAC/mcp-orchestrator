@@ -10,6 +10,5 @@
 # Workers typically use less memory than orchestrator
 
 NODE_OPTIONS="--max-old-space-size=2048 \
-              --expose-gc \
-              --optimize-for-size" \
+              --expose-gc" \
 node dist/worker.js
