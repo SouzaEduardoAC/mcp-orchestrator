@@ -1,6 +1,7 @@
 import { RedisClientType } from 'redis';
 import { RedisFactory } from '../../infrastructure/cache/RedisFactory';
 import { gzipSync, gunzipSync } from 'zlib';
+import { TokenCounter } from '../../utils/TokenCounter';
 
 export interface Message {
   role: 'user' | 'model' | 'tool';
@@ -19,8 +20,14 @@ export interface ConversationRepository {
 export class RedisConversationRepository implements ConversationRepository {
   private redis: RedisClientType | null = null;
   private readonly PREFIX = 'mcp:conversation:';
-  private readonly MAX_HISTORY = 50;
+  private readonly MAX_HISTORY = 50; // Fallback message count limit
   private readonly ENABLE_COMPRESSION = process.env.ENABLE_CONVERSATION_COMPRESSION === 'true';
+  private readonly HISTORY_TTL_SECONDS = parseInt(
+    process.env.HISTORY_TTL_SECONDS || '86400'
+  ); // Default: 24 hours
+  private readonly MAX_HISTORY_TOKENS = parseInt(
+    process.env.MAX_HISTORY_TOKENS || '50000'
+  ); // Default: 50k tokens
 
   private async getRedis(): Promise<RedisClientType> {
     if (!this.redis) {
@@ -60,14 +67,22 @@ export class RedisConversationRepository implements ConversationRepository {
 
     // Sliding window
     await client.lTrim(key, -this.MAX_HISTORY, -1);
+
+    // Set TTL: Conversation expires after configured time of inactivity (default: 24 hours)
+    // This provides a safety net for orphaned keys
+    await client.expire(key, this.HISTORY_TTL_SECONDS);
   }
 
+  /**
+   * Get history with token-aware truncation.
+   * Returns messages that fit within the configured token limit.
+   */
   async getHistory(sessionId: string): Promise<Message[]> {
     const client = await this.getRedis();
     const key = `${this.PREFIX}${sessionId}`;
     const raw = await client.lRange(key, 0, -1);
 
-    return raw.map(item => {
+    const messages = raw.map(item => {
       let data: string;
 
       if (this.ENABLE_COMPRESSION) {
@@ -86,6 +101,50 @@ export class RedisConversationRepository implements ConversationRepository {
 
       return JSON.parse(data) as Message;
     });
+
+    // Truncate based on token count, not just message count
+    return this.truncateByTokens(messages);
+  }
+
+  /**
+   * Truncate messages to stay within token budget.
+   * Keeps most recent messages that fit within limit.
+   */
+  private truncateByTokens(messages: Message[]): Message[] {
+    let totalTokens = TokenCounter.countHistoryTokens(messages);
+
+    // If within limit, return all
+    if (totalTokens <= this.MAX_HISTORY_TOKENS) {
+      return messages;
+    }
+
+    console.warn(
+      `[ConversationRepo] History exceeds token limit: ${totalTokens} > ${this.MAX_HISTORY_TOKENS}. Truncating...`
+    );
+
+    // Keep most recent messages that fit
+    const result: Message[] = [];
+    totalTokens = 0;
+
+    // Iterate from newest to oldest
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      const msgTokens = TokenCounter.countMessageTokens(msg);
+
+      if (totalTokens + msgTokens <= this.MAX_HISTORY_TOKENS) {
+        result.unshift(msg); // Add to beginning
+        totalTokens += msgTokens;
+      } else {
+        // Can't fit more messages
+        break;
+      }
+    }
+
+    console.log(
+      `[ConversationRepo] Truncated to ${result.length} messages (${totalTokens} tokens)`
+    );
+
+    return result;
   }
 
   async clearHistory(sessionId: string): Promise<void> {

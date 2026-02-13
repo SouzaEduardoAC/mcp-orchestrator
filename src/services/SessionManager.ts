@@ -1,11 +1,13 @@
 import { DockerClient } from '../infrastructure/docker/DockerClient';
 import { ContainerPool } from '../infrastructure/docker/ContainerPool';
 import { SessionRepository, SessionData } from '../domain/session/SessionRepository';
+import { ConversationRepository } from '../domain/conversation/ConversationRepository';
 
 export class SessionManager {
   constructor(
     private dockerClient: DockerClient,
     private sessionRepository: SessionRepository,
+    private conversationRepo: ConversationRepository,
     private containerPool?: ContainerPool
   ) {}
 
@@ -35,6 +37,10 @@ export class SessionManager {
 
         await this.sessionRepository.saveSession(sessionId, container.id);
 
+        // Clear any orphaned history for new sessions
+        await this.conversationRepo.clearHistory(sessionId);
+        console.log(`[SessionManager] Cleared orphaned history for new session: ${sessionId}`);
+
         return {
             containerId: container.id,
             startTime: Date.now(),
@@ -58,5 +64,9 @@ export class SessionManager {
     }
 
     await this.sessionRepository.deleteSession(sessionId);
+
+    // CRITICAL: Clean up conversation history to prevent orphaned data
+    await this.conversationRepo.clearHistory(sessionId);
+    console.log(`[SessionManager] Cleaned conversation history for session: ${sessionId}`);
   }
 }

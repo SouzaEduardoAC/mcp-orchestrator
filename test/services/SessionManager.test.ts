@@ -1,6 +1,7 @@
 import { SessionManager } from '../../src/services/SessionManager';
 import { DockerClient } from '../../src/infrastructure/docker/DockerClient';
 import { SessionRepository } from '../../src/domain/session/SessionRepository';
+import { ConversationRepository } from '../../src/domain/conversation/ConversationRepository';
 
 // Mocks
 const mockSpawnContainer = jest.fn();
@@ -26,12 +27,19 @@ const mockSessionRepository = {
     acquireLock: mockAcquireLock
 } as unknown as SessionRepository;
 
+const mockClearHistory = jest.fn();
+const mockConversationRepository = {
+    clearHistory: mockClearHistory,
+    addMessage: jest.fn(),
+    getHistory: jest.fn()
+} as unknown as ConversationRepository;
+
 describe('SessionManager', () => {
     let sessionManager: SessionManager;
 
     beforeEach(() => {
         jest.clearAllMocks();
-        sessionManager = new SessionManager(mockDockerClient, mockSessionRepository);
+        sessionManager = new SessionManager(mockDockerClient, mockSessionRepository, mockConversationRepository);
     });
 
     it('should acquire a new session if it does not exist', async () => {
@@ -45,6 +53,7 @@ describe('SessionManager', () => {
         expect(mockAcquireLock).toHaveBeenCalledWith('user-1', 30000);
         expect(mockSpawnContainer).toHaveBeenCalled();
         expect(mockSaveSession).toHaveBeenCalledWith('user-1', 'container-123');
+        expect(mockClearHistory).toHaveBeenCalledWith('user-1');
         expect(session.containerId).toBe('container-123');
     });
 
@@ -68,6 +77,7 @@ describe('SessionManager', () => {
 
         expect(mockStopContainer).toHaveBeenCalledWith('term-123');
         expect(mockDeleteSession).toHaveBeenCalledWith('user-1');
+        expect(mockClearHistory).toHaveBeenCalledWith('user-1');
     });
 
     it('should do nothing when terminating a non-existent session', async () => {

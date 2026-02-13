@@ -34,6 +34,8 @@ export class JanitorService {
         if (session && Date.now() - session.lastActive > this.MAX_IDLE_TIME_MS) {
           console.log(`[Janitor] Terminating expired session: ${id}`);
           await this.sessionManager.terminateSession(id);
+          // History cleanup is handled by terminateSession()
+          console.log(`[Janitor] Cleaned history for session: ${id}`);
         }
       }
     } catch (error) {

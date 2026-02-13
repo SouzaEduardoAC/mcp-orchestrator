@@ -1,5 +1,6 @@
 import { DockerClient } from '../infrastructure/docker/DockerClient';
 import { RedisSessionRepository } from '../domain/session/SessionRepository';
+import { RedisConversationRepository } from '../domain/conversation/ConversationRepository';
 import { SessionManager } from '../services/SessionManager';
 import { JanitorService } from '../services/JanitorService';
 import { RedisFactory } from '../infrastructure/cache/RedisFactory';
@@ -8,7 +9,8 @@ async function main() {
   console.log('Initializing components...');
   const dockerClient = new DockerClient();
   const sessionRepo = new RedisSessionRepository();
-  const sessionManager = new SessionManager(dockerClient, sessionRepo);
+  const conversationRepo = new RedisConversationRepository();
+  const sessionManager = new SessionManager(dockerClient, sessionRepo, conversationRepo);
   const janitor = new JanitorService(sessionManager, sessionRepo);
 
   // Setup test user

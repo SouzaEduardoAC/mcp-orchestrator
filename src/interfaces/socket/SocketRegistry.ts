@@ -115,6 +115,13 @@ export class SocketRegistry {
             });
         });
 
+        // Allow users to manually reset conversation history
+        socket.on('history:reset', async () => {
+          console.log(`[Socket] History reset requested for ${sessionId}`);
+          await this.conversationRepo.clearHistory(sessionId);
+          socket.emit('system:message', 'Conversation history cleared. Starting fresh.');
+        });
+
         socket.on('disconnect', async () => {
            console.log(`[Socket] Disconnect: ${sessionId}`);
            await agent.cleanup();

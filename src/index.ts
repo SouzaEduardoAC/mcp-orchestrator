@@ -40,7 +40,7 @@ async function bootstrap() {
   }
 
   // 4. Domain Services
-  const sessionManager = new SessionManager(dockerClient, sessionRepo, containerPool);
+  const sessionManager = new SessionManager(dockerClient, sessionRepo, conversationRepo, containerPool);
   const janitor = new JanitorService(sessionManager, sessionRepo);
 
   // 5. Interface Layer

@@ -4,6 +4,7 @@ import { DockerClient } from '../infrastructure/docker/DockerClient';
 import { LLMProvider, ToolDefinition } from '../interfaces/llm/LLMProvider';
 import { MCPConnectionManager } from './MCPConnectionManager';
 import { MCPHealthMonitor } from './MCPHealthMonitor';
+import { TokenCounter } from '../utils/TokenCounter';
 
 export interface AgentEvents {
   onThinking: () => void;
@@ -84,7 +85,7 @@ export class MCPAgent {
     try {
       this.events.onThinking();
 
-      // 1. Load History
+      // 1. Load History (with token-aware truncation)
       const history = await this.conversationRepo.getHistory(this.sessionId);
 
       // 2. Add User Message
@@ -97,7 +98,74 @@ export class MCPAgent {
       // 3. Fetch Tools from all connected MCPs
       const tools = await this.connectionManager.getAllTools();
 
-      // 4. Call Provider
+      // 4. Validate total token count before sending
+      const historyTokens = TokenCounter.countHistoryTokens(history);
+      const promptTokens = TokenCounter.estimateTokens(userPrompt);
+      const toolsTokens = this.estimateToolDefinitionTokens(tools);
+      const totalTokens = historyTokens + promptTokens + toolsTokens;
+
+      // Leave room for response (5k tokens buffer)
+      const maxInputTokens = 195000; // 200k limit - 5k buffer
+
+      // Log token usage metrics
+      console.log(`[MCPAgent] Token usage for ${this.sessionId}:`, {
+        history: historyTokens,
+        prompt: promptTokens,
+        tools: toolsTokens,
+        total: totalTokens,
+        limit: maxInputTokens,
+        utilization: `${((totalTokens / maxInputTokens) * 100).toFixed(1)}%`
+      });
+
+      if (totalTokens > maxInputTokens) {
+        const errorMsg = `Token limit exceeded: ${totalTokens} > ${maxInputTokens}. History: ${historyTokens}, Prompt: ${promptTokens}, Tools: ${toolsTokens}`;
+        console.error(`[MCPAgent] ${errorMsg}`);
+
+        // Try again with reduced history
+        console.log('[MCPAgent] Retrying with reduced history...');
+        await this.conversationRepo.clearHistory(this.sessionId);
+
+        // Add only current prompt
+        await this.conversationRepo.addMessage(this.sessionId, {
+          role: 'user',
+          content: userPrompt,
+          timestamp: Date.now()
+        });
+
+        // Reload with just current message
+        const freshHistory = await this.conversationRepo.getHistory(this.sessionId);
+        const result = await this.provider.generateResponse(freshHistory, userPrompt, tools);
+
+        // Handle the result
+        if (result.toolCalls && result.toolCalls.length > 0) {
+          this.pendingCalls = result.toolCalls.map((call, index) => ({
+            id: call.id || `call_${Date.now()}_${index}`,
+            name: call.name,
+            args: call.args,
+            status: 'pending'
+          }));
+
+          const firstCall = this.pendingCalls[0];
+          this.events.onToolApprovalRequired(
+            firstCall.name,
+            firstCall.args,
+            firstCall.id,
+            1,
+            this.pendingCalls.length
+          );
+          return;
+        }
+
+        this.events.onResponse(result.text);
+        await this.conversationRepo.addMessage(this.sessionId, {
+          role: 'model',
+          content: result.text,
+          timestamp: Date.now()
+        });
+        return;
+      }
+
+      // 5. Call Provider
       const result = await this.provider.generateResponse(history, userPrompt, tools);
 
       // 5. Handle Tool Calls
@@ -238,6 +306,15 @@ export class MCPAgent {
       }
   }
   
+  /**
+   * Estimate tokens for tool definitions.
+   * Tool schemas add to the input token count.
+   */
+  private estimateToolDefinitionTokens(tools: ToolDefinition[]): number {
+    const toolsJson = JSON.stringify(tools);
+    return TokenCounter.estimateTokens(toolsJson);
+  }
+
   async cleanup() {
       try {
           this.pendingCalls = []; // Clear queue
