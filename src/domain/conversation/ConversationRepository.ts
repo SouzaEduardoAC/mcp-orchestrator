@@ -26,8 +26,8 @@ export class RedisConversationRepository implements ConversationRepository {
     process.env.HISTORY_TTL_SECONDS || '86400'
   ); // Default: 24 hours
   private readonly MAX_HISTORY_TOKENS = parseInt(
-    process.env.MAX_HISTORY_TOKENS || '50000'
-  ); // Default: 50k tokens
+    process.env.MAX_HISTORY_TOKENS || '30000'
+  ); // Default: 30k tokens (leaves room for tool definitions)
 
   private async getRedis(): Promise<RedisClientType> {
     if (!this.redis) {
